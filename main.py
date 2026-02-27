@@ -7,14 +7,16 @@ import os
 st.set_page_config(page_title="Team Publisher Portal", layout="wide")
 
 # 2. Function to Load and Combine all CSVs
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60)  # Refresh data every 60 seconds
 def load_all_data():
     path = 'csv_data'
+    
     if not os.path.exists(path):
         os.makedirs(path)
         return None
 
     all_files = glob.glob(os.path.join(path, "*.csv")) + glob.glob(os.path.join(path, "*.CSV"))
+    
     if not all_files:
         return None
 
@@ -36,29 +38,25 @@ def load_all_data():
 
 # 3. App Interface
 st.title("🌐 Team Publisher Data Portal")
+st.markdown("Compare Guest Post and Link Insertion prices side-by-side.")
 
 df = load_all_data()
 
 if df is not None:
-    # --- SIDEBAR SEARCH FORM ---
+    # Sidebar for Search
     st.sidebar.header("Search Filters")
+    unique_files = df['Source_File'].unique()
+    st.sidebar.info(f"Connected to {len(unique_files)} CSV files.")
     
-    # We use a form here so the "Go" button acts as the trigger
-    with st.sidebar.form(key='search_form'):
-        search_query = st.text_input("Enter Domain (e.g., lifeunexpected.co.uk)").strip().lower()
-        submit_button = st.form_submit_button(label='🚀 Go')
+    search_query = st.sidebar.text_input("Enter Domain (e.g., lifeunexpected.co.uk)").strip().lower()
 
-    # Admin toggle stays outside the form so it updates instantly
-    show_raw_data = st.sidebar.checkbox("Show Full Database")
-
-    # --- MAIN CONTENT ---
-    # The logic only triggers if the submit button is clicked OR if a query exists
-    if submit_button and search_query:
+    if search_query:
         results = df[df['Publisher'] == search_query]
 
         if not results.empty:
             st.success(f"Showing results for **{search_query}**")
             
+            # Create two big columns for the side-by-side layout
             left_col, right_col = st.columns(2)
 
             # --- LEFT COLUMN: GUEST POST ---
@@ -84,7 +82,7 @@ if df is not None:
                             with a2:
                                 st.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
                 else:
-                    st.info("No Guest Post data found.")
+                    st.info("No Guest Post data found for this site.")
 
             # --- RIGHT COLUMN: LINK INSERTION ---
             with right_col:
@@ -109,19 +107,20 @@ if df is not None:
                             with b2:
                                 st.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
                 else:
-                    st.info("No Link Insertion data found.")
+                    st.info("No Link Insertion data found for this site.")
         else:
             st.error(f"No data found for '{search_query}'.")
-
-    elif not show_raw_data:
-        st.info("👈 Enter a publisher domain and click 'Go' to start.")
-        st.write("---")
-        st.caption("Developed for the Link Building Team")
-
-    if show_raw_data:
-        st.divider()
-        st.subheader("📊 Full Database View")
-        st.dataframe(df)
-
+    else:
+        st.info("👈 Enter a publisher domain in the sidebar to begin.")
+        
+        # Dashboard Overview
+        st.subheader("Database Overview")
+        s1, s2, s3 = st.columns(3)
+        s1.metric("Total Records", len(df))
+        s2.metric("Unique Domains", df['Publisher'].nunique())
+        s3.metric("Source Files", len(unique_files))
+        
+        st.write("### Data Preview")
+        st.dataframe(df.head(50))
 else:
     st.warning("No CSV files found in the `csv_data` folder.")
