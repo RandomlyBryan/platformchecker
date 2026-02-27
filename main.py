@@ -4,7 +4,7 @@ import glob
 import os
 
 # 1. Page Configuration
-st.set_page_config(page_title="Best Rate Portal", layout="wide", page_icon="🌐")
+st.set_page_config(page_title="Best Rate Portal", layout="wide", page_icon="🔗📝")
 
 # 2. Function to Load and Combine all CSVs
 @st.cache_data(ttl=60)
@@ -21,8 +21,8 @@ def load_all_data():
     for f in all_files:
         try:
             temp_df = pd.read_csv(f, low_memory=False)
-            # Standardize columns to avoid "KeyError" if different CSVs use different casing
             temp_df.columns = [c.strip() for c in temp_df.columns]
+            # Keep track of which file it came from internally, but we won't show it
             temp_df['Source_File'] = os.path.basename(f)
             df_list.append(temp_df)
         except Exception as e:
@@ -31,18 +31,22 @@ def load_all_data():
     if df_list:
         combined_df = pd.concat(df_list, ignore_index=True)
         if 'Publisher' in combined_df.columns:
+            # Clean domain names
             combined_df['Publisher'] = combined_df['Publisher'].astype(str).str.strip().str.lower()
             
+            # Standardize Price
             if 'Price 1st' in combined_df.columns:
                 combined_df['Price_Numeric'] = pd.to_numeric(
                     combined_df['Price 1st'].astype(str).str.replace(r'[$,]', '', regex=True), 
                     errors='coerce'
                 )
             
-            # Sort by Price first so the drop_duplicates keeps the cheapest one
-            combined_df = combined_df.sort_values(by=['Publisher', 'Price_Numeric'], ascending=True)
+            # Sort globally: Publisher -> Type -> Price
+            combined_df = combined_df.sort_values(by=['Publisher', 'Type', 'Price_Numeric'], ascending=True)
             
-            # Only drop if BOTH Price and Vendor are the same to allow alternative sources with different prices
+            # RELAXED DUPLICATE REMOVAL: 
+            # Only drop if the Domain, Type, Price, AND Vendor name are all identical.
+            # This ensures that two different prices for the same domain stay in the list.
             combined_df = combined_df.drop_duplicates(subset=['Publisher', 'Type', 'Price_Numeric', 'Best Seller 1st'])
             
         return combined_df
@@ -55,16 +59,15 @@ df = load_all_data()
 
 if df is not None:
     st.sidebar.header("Search Filters")
-    
     with st.sidebar.form("search_form"):
         search_query = st.text_input("Enter Domain").strip().lower()
         submit_button = st.form_submit_button("Search 🔍", use_container_width=True)
 
     if search_query:
-        # Filter data for the specific domain
         domain_results = df[df['Publisher'] == search_query]
 
         if not domain_results.empty:
+            # SEO Metrics Section
             base_info = domain_results.iloc[0]
             st.success(f"Results for: **{search_query}**")
             
@@ -80,23 +83,16 @@ if df is not None:
             st.divider()
             left_col, right_col = st.columns(2)
 
-            # Define search terms for the two columns
-            categories = [
-                (left_col, "Guest Post", "📝"),
-                (right_col, "Link Insertion", "🔗")
-            ]
-
-            for col, link_type, icon in categories:
+            for col, link_type, icon in [(left_col, "Guest Post", "📝"), (right_col, "Link Insertion", "🔗")]:
                 with col:
                     st.header(f"{icon} {link_type}")
                     
-                    # Search using "contains" to catch "Guest Post (Real Site)" etc.
-                    type_data = domain_results[domain_results['Type'].str.contains(link_type, case=False, na=False)]
-                    # Sort again locally to be 100% sure
+                    # Filter for type and force a clean index [0, 1, 2...]
+                    type_data = domain_results[domain_results['Type'].str.contains(link_type, case=False, na=False)].copy()
                     type_data = type_data.sort_values('Price_Numeric').reset_index(drop=True)
                     
                     if not type_data.empty:
-                        # --- 🥇 BEST OPTION ---
+                        # 🥇 BEST OPTION
                         best_row = type_data.iloc[0]
                         with st.container(border=True):
                             st.subheader("🥇 Best Option")
@@ -105,7 +101,8 @@ if df is not None:
                             m1.metric("Price", f"${best_row.get('Price 1st', 'N/A')}")
                             m2.metric("Rating", f"⭐ {best_row.get('Rating 1st', 'N/A')}")
 
-                        # --- 🥈 2nd BEST OPTION ---
+                        # 🥈 2nd BEST OPTION
+                        # Changed check: If more than 1 row exists, show the second one.
                         if len(type_data) > 1:
                             second_row = type_data.iloc[1]
                             st.write("**🥈 2nd Best Option**")
@@ -115,9 +112,9 @@ if df is not None:
                                 a1.info(f"Price: **${second_row.get('Price 1st', 'N/A')}**")
                                 a2.info(f"Rating: ⭐ {second_row.get('Rating 1st', 'N/A')}")
                         else:
-                            st.caption("No alternative options found.")
+                            st.caption("No alternative sources found in the database.")
                     else:
-                        st.info(f"No {link_type} data found.")
+                        st.info(f"No {link_type} listings found.")
         else:
             st.error(f"No data found for '{search_query}'.")
     else:
