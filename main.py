@@ -39,6 +39,10 @@ def load_all_data():
                     errors='coerce'
                 )
             
+            # --- NEW ADDITION: Remove duplicates to ensure 1st and 2nd best are unique ---
+            # This drops rows where Publisher, Type, and Price are identical
+            combined_df = combined_df.drop_duplicates(subset=['Publisher', 'Type', 'Price_Numeric'])
+            
             # Sort by Domain, Type, and then Price (Cheapest at the top)
             combined_df = combined_df.sort_values(by=['Publisher', 'Type', 'Price_Numeric'], ascending=True)
             
@@ -87,7 +91,7 @@ if df is not None:
                 with col:
                     st.header(f"{'📝' if 'Guest' in link_type else '🔗'} {link_type}")
                     
-                    # Filter for specific type and ensure we handle duplicates between files
+                    # Filter for specific type
                     type_data = domain_results[domain_results['Type'].str.contains(link_type, case=False, na=False)]
                     
                     if not type_data.empty:
@@ -100,11 +104,6 @@ if df is not None:
                             m1, m2 = st.columns(2)
                             m1.metric("Price", f"${best_row.get('Price 1st', 'N/A')}")
                             m2.metric("Rating", f"⭐ {best_row.get('Rating 1st', 'N/A')}")
-                            
-                            # REMOVED: Order via button / Source Info
-                            # link = best_row.get('Referral Link 1st', '#')
-                            # if pd.notna(link) and str(link).startswith('http'):
-                            #     st.link_button(f"Order via {best_row.get('Source_File')}", link, use_container_width=True)
 
                         # --- 2nd BEST OPTION (Row 2) ---
                         if len(type_data) > 1:
@@ -114,13 +113,6 @@ if df is not None:
                                 st.write(f"**Vendor:** {second_row.get('Best Seller 1st', 'N/A')}")
                                 a1, a2 = st.columns(2)
                                 a1.info(f"Price: **${second_row.get('Price 1st', 'N/A')}**")
-                                # REMOVED: Source metric
-                                # a2.info(f"Source: {second_row['Source_File']}")
-                                
-                                # REMOVED: Order via button
-                                # link2 = second_row.get('Referral Link 1st', '#')
-                                # if pd.notna(link2) and str(link2).startswith('http'):
-                                #     st.link_button(f"Order via {second_row.get('Source_File')}", link2, use_container_width=True)
                         else:
                             st.caption("No alternative sources found for this domain.")
                     else:
