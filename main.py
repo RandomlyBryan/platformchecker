@@ -4,26 +4,22 @@ import glob
 import os
 
 # 1. Page Configuration
-st.set_page_config(page_title="Rate Checker", layout="wide")
+st.set_page_config(page_title="Rate Checker", layout="wide", page_icon="🌐")
 
 # 2. Function to Load and Combine all CSVs
 @st.cache_data(ttl=60)
 def load_all_data():
     path = 'csv_data'
-    
-    # Ensure directory exists
     if not os.path.exists(path):
         os.makedirs(path)
     
     all_files = glob.glob(os.path.join(path, "*.csv")) + glob.glob(os.path.join(path, "*.CSV"))
-    
     if not all_files:
         return None
 
     df_list = []
     for f in all_files:
         try:
-            # We use low_memory=False to handle mixed types in large inventory files
             temp_df = pd.read_csv(f, low_memory=False)
             temp_df['Source_File'] = os.path.basename(f)
             df_list.append(temp_df)
@@ -33,124 +29,102 @@ def load_all_data():
     if df_list:
         combined_df = pd.concat(df_list, ignore_index=True)
         if 'Publisher' in combined_df.columns:
-            # Clean domain names for exact matching
+            # Clean domain names
             combined_df['Publisher'] = combined_df['Publisher'].astype(str).str.strip().str.lower()
+            
+            # Convert Price to numeric for accurate sorting
+            if 'Price 1st' in combined_df.columns:
+                combined_df['Price_Numeric'] = pd.to_numeric(
+                    combined_df['Price 1st'].astype(str).str.replace(r'[$,]', '', regex=True), 
+                    errors='coerce'
+                )
+            
+            # Sort everything by domain and price (lowest first)
+            combined_df = combined_df.sort_values(by=['Publisher', 'Type', 'Price_Numeric'], ascending=True)
+            
         return combined_df
     return None
 
 # 3. App Interface
-st.title("🌐 Rate Portal")
-st.markdown("Side-by-side comparison of Guest Posts and Link Insertions with SEO Metrics.")
+st.title("🌐 Best Rate Portal")
+st.markdown("Side-by-side comparison. Showing the **Best Price** found across all files.")
 
 df = load_all_data()
 
 if df is not None:
-    # Sidebar for Search
+    # Sidebar
     st.sidebar.header("Search Filters")
     unique_files = df['Source_File'].unique()
     st.sidebar.info(f"Connected to {len(unique_files)} CSV files.")
     
-    # --- SEARCH FORM WITH GO BUTTON ---
     with st.sidebar.form("search_form"):
         search_query = st.text_input("Enter Domain (e.g., reddit.com)").strip().lower()
-        # The 'Go' button handles the click, and 'Enter' key works automatically
         submit_button = st.form_submit_button("Search 🔍", use_container_width=True)
 
     if search_query:
-        results = df[df['Publisher'] == search_query]
+        # Filter for the domain
+        domain_results = df[df['Publisher'] == search_query]
 
-        if not results.empty:
-            # Extract common metrics from the first record found
-            base_info = results.iloc[0]
-            
+        if not domain_results.empty:
+            # SEO Metrics (taken from the very first available row)
+            base_info = domain_results.iloc[0]
             st.success(f"Results for: **{search_query}**")
             
-            # --- SEO STATS SECTION (from your specific CSV format) ---
             with st.container(border=True):
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Authority (AS)", base_info.get('AS', 'N/A'))
                 col2.metric("Domain Rating (DR)", base_info.get('DR', 'N/A'))
-                
-                # Format traffic numbers with commas
                 traffic = base_info.get('Total Organic Traffic', 0)
-                traffic_display = f"{int(traffic):,}" if pd.notna(traffic) else "N/A"
+                traffic_display = f"{int(traffic):,}" if pd.notna(traffic) and isinstance(traffic, (int, float)) else "N/A"
                 col3.metric("Total Traffic", traffic_display)
-                
                 col4.metric("Top Country", str(base_info.get('Top Country', 'N/A')).upper())
-                
-                st.caption(f"**Category:** {base_info.get('Category', 'N/A')} | **Link Type:** {base_info.get('Link Follow', 'N/A')}")
 
             st.divider()
 
-            # Create two big columns for side-by-side comparison
             left_col, right_col = st.columns(2)
 
-            # --- LEFT COLUMN: GUEST POST ---
-            with left_col:
-                st.header("📝 Guest Post")
-                guest_data = results[results['Type'].str.contains('Guest Post', case=False, na=False)]
-                if not guest_data.empty:
-                    for _, row in guest_data.iterrows():
+            # --- Logic to display Lowest vs 2nd Lowest ---
+            for col, link_type in zip([left_col, right_col], ['Guest Post', 'Link Insertion']):
+                with col:
+                    st.header(f"{'📝' if 'Guest' in link_type else '🔗'} {link_type}")
+                    
+                    # Filter for specific type (Guest Post or Link Insertion)
+                    type_data = domain_results[domain_results['Type'].str.contains(link_type, case=False, na=False)]
+                    
+                    if not type_data.empty:
+                        # 1st Lowest Price Record
+                        best_deal = type_data.iloc[0]
+                        
                         with st.container(border=True):
-                            st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")
-                            
+                            st.subheader(f"🥇 Cheapest: {best_deal.get('Best Seller 1st', 'N/A')}")
                             m1, m2 = st.columns(2)
-                            m1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
-                            m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
+                            m1.metric("Price", f"${best_deal.get('Price 1st', 'N/A')}")
+                            m2.metric("Source", best_deal['Source_File'])
                             
-                            link_1 = row.get('Referral Link 1st', '#')
-                            if pd.notna(link_1) and str(link_1).startswith('http'):
-                                st.link_button("Order on Best Platform", link_1, use_container_width=True)
+                            link = best_deal.get('Referral Link 1st', '#')
+                            if pd.notna(link) and str(link).startswith('http'):
+                                st.link_button(f"Order on {best_deal.get('Best Seller 1st', 'Platform')}", link, use_container_width=True)
 
-                            st.divider()
-                            st.write("**🥈 Alternatives**")
-                            a1, a2 = st.columns(2)
-                            a1.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
-                            a2.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
-                else:
-                    st.info("No Guest Post data available.")
-
-            # --- RIGHT COLUMN: LINK INSERTION ---
-            with right_col:
-                st.header("🔗 Link Insertion")
-                link_data = results[results['Type'].str.contains('Link Insertion', case=False, na=False)]
-                if not link_data.empty:
-                    for _, row in link_data.iterrows():
-                        with st.container(border=True):
-                            st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")
-                            
-                            m1, m2 = st.columns(2)
-                            m1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
-                            m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
-                            
-                            link_1 = row.get('Referral Link 1st', '#')
-                            if pd.notna(link_1) and str(link_1).startswith('http'):
-                                st.link_button("Order on Best Platform", link_1, use_container_width=True)
-
-                            st.divider()
-                            st.write("**🥈 Alternatives**")
-                            b1, b2 = st.columns(2)
-                            b1.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
-                            b2.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
-                else:
-                    st.info("No Link Insertion data available.")
+                        # 2nd Lowest Price Record (if it exists)
+                        if len(type_data) > 1:
+                            second_deal = type_data.iloc[1]
+                            st.write("**🥈 2nd Best Option**")
+                            with st.container(border=True):
+                                a1, a2 = st.columns(2)
+                                a1.info(f"**{second_deal.get('Best Seller 1st', 'N/A')}**\n\nPrice: ${second_deal.get('Price 1st', 'N/A')}")
+                                a2.info(f"Source: {second_deal['Source_File']}")
+                        else:
+                            st.caption("No other CSVs contain this domain for comparison.")
+                    else:
+                        st.info(f"No {link_type} data found.")
         else:
             st.error(f"No data found for '{search_query}'.")
     else:
         st.info("👈 Enter a domain in the sidebar to search.")
-        
-        # Dashboard Overview
         st.subheader("Database Overview")
-        s1, s2, s3 = st.columns(3)
-        s1.metric("Total Records", len(df))
+        s1, s2 = st.columns(2)
+        s1.metric("Total Rows in CSVs", len(df))
         s2.metric("Unique Domains", df['Publisher'].nunique())
-        
-        # Calculate avg DR if column exists
-        if 'DR' in df.columns:
-            avg_dr = int(df['DR'].mean())
-            s3.metric("Avg. Domain Rating", avg_dr)
-        
-        st.write("### Latest Entries")
         st.dataframe(df.head(50), hide_index=True)
 else:
-    st.warning("No CSV files found. Please place your CSV files in the `csv_data` folder.")
+    st.warning("No CSV files found in `csv_data` folder.")
