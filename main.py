@@ -4,7 +4,7 @@ import glob
 import os
 
 # 1. Page Configuration
-st.set_page_config(page_title="Rate Checker", layout="wide", page_icon="🌐")
+st.set_page_config(page_title="Best Rate Portal", layout="wide", page_icon="🌐")
 
 # 2. Function to Load and Combine all CSVs
 @st.cache_data(ttl=60)
@@ -32,22 +32,22 @@ def load_all_data():
             # Clean domain names
             combined_df['Publisher'] = combined_df['Publisher'].astype(str).str.strip().str.lower()
             
-            # Convert Price to numeric for accurate sorting
+            # Convert Price to numeric for accurate sorting across different files
             if 'Price 1st' in combined_df.columns:
                 combined_df['Price_Numeric'] = pd.to_numeric(
                     combined_df['Price 1st'].astype(str).str.replace(r'[$,]', '', regex=True), 
                     errors='coerce'
                 )
             
-            # Sort everything by domain and price (lowest first)
+            # Sort by Domain, Type, and then Price (Cheapest at the top)
             combined_df = combined_df.sort_values(by=['Publisher', 'Type', 'Price_Numeric'], ascending=True)
             
         return combined_df
     return None
 
 # 3. App Interface
-st.title("🌐 Best Rate Portal")
-st.markdown("Side-by-side comparison. Showing the **Best Price** found across all files.")
+st.title("🔗📝 Best Rate Provider")
+st.markdown("Side-by-side comparison of results from multiple sources.")
 
 df = load_all_data()
 
@@ -55,18 +55,17 @@ if df is not None:
     # Sidebar
     st.sidebar.header("Search Filters")
     unique_files = df['Source_File'].unique()
-    st.sidebar.info(f"Connected to {len(unique_files)} CSV files.")
+    st.sidebar.info(f"Searching across {len(unique_files)} CSV sources.")
     
     with st.sidebar.form("search_form"):
         search_query = st.text_input("Enter Domain (e.g., reddit.com)").strip().lower()
         submit_button = st.form_submit_button("Search 🔍", use_container_width=True)
 
     if search_query:
-        # Filter for the domain
         domain_results = df[df['Publisher'] == search_query]
 
         if not domain_results.empty:
-            # SEO Metrics (taken from the very first available row)
+            # Common SEO Metrics
             base_info = domain_results.iloc[0]
             st.success(f"Results for: **{search_query}**")
             
@@ -83,38 +82,45 @@ if df is not None:
 
             left_col, right_col = st.columns(2)
 
-            # --- Logic to display Lowest vs 2nd Lowest ---
+            # --- Logic to display Best vs 2nd Best from different CSV rows ---
             for col, link_type in zip([left_col, right_col], ['Guest Post', 'Link Insertion']):
                 with col:
                     st.header(f"{'📝' if 'Guest' in link_type else '🔗'} {link_type}")
                     
-                    # Filter for specific type (Guest Post or Link Insertion)
+                    # Filter for specific type and ensure we handle duplicates between files
                     type_data = domain_results[domain_results['Type'].str.contains(link_type, case=False, na=False)]
                     
                     if not type_data.empty:
-                        # 1st Lowest Price Record
-                        best_deal = type_data.iloc[0]
-                        
+                        # --- BEST OPTION (Row 1) ---
+                        best_row = type_data.iloc[0]
                         with st.container(border=True):
-                            st.subheader(f"🥇 Cheapest: {best_deal.get('Best Seller 1st', 'N/A')}")
-                            m1, m2 = st.columns(2)
-                            m1.metric("Price", f"${best_deal.get('Price 1st', 'N/A')}")
-                            m2.metric("Source", best_deal['Source_File'])
+                            st.subheader(f"🥇 Best Option")
+                            st.write(f"**Vendor:** {best_row.get('Best Seller 1st', 'N/A')}")
                             
-                            link = best_deal.get('Referral Link 1st', '#')
+                            m1, m2 = st.columns(2)
+                            m1.metric("Price", f"${best_row.get('Price 1st', 'N/A')}")
+                            m2.metric("Rating", f"⭐ {best_row.get('Rating 1st', 'N/A')}")
+                            
+                            link = best_row.get('Referral Link 1st', '#')
                             if pd.notna(link) and str(link).startswith('http'):
-                                st.link_button(f"Order on {best_deal.get('Best Seller 1st', 'Platform')}", link, use_container_width=True)
+                                st.link_button(f"Order via {best_row.get('Source_File')}", link, use_container_width=True)
 
-                        # 2nd Lowest Price Record (if it exists)
+                        # --- 2nd BEST OPTION (Row 2 from a different CSV or entry) ---
                         if len(type_data) > 1:
-                            second_deal = type_data.iloc[1]
-                            st.write("**🥈 2nd Best Option**")
+                            second_row = type_data.iloc[1]
+                            st.write("**🥈 2nd Best Option (Alternative Source)**")
                             with st.container(border=True):
+                                st.write(f"**Vendor:** {second_row.get('Best Seller 1st', 'N/A')}")
                                 a1, a2 = st.columns(2)
-                                a1.info(f"**{second_deal.get('Best Seller 1st', 'N/A')}**\n\nPrice: ${second_deal.get('Price 1st', 'N/A')}")
-                                a2.info(f"Source: {second_deal['Source_File']}")
+                                a1.info(f"Price: **${second_row.get('Price 1st', 'N/A')}**")
+                                a2.info(f"Source: {second_row['Source_File']}")
+                                
+                                # Optional link for the 2nd option
+                                link2 = second_row.get('Referral Link 1st', '#')
+                                if pd.notna(link2) and str(link2).startswith('http'):
+                                    st.link_button(f"Order via {second_row.get('Source_File')}", link2, use_container_width=True)
                         else:
-                            st.caption("No other CSVs contain this domain for comparison.")
+                            st.caption("No alternative sources found for this domain.")
                     else:
                         st.info(f"No {link_type} data found.")
         else:
@@ -123,8 +129,8 @@ if df is not None:
         st.info("👈 Enter a domain in the sidebar to search.")
         st.subheader("Database Overview")
         s1, s2 = st.columns(2)
-        s1.metric("Total Rows in CSVs", len(df))
+        s1.metric("Total Records", len(df))
         s2.metric("Unique Domains", df['Publisher'].nunique())
-        st.dataframe(df.head(50), hide_index=True)
+        st.dataframe(df.head(20), hide_index=True)
 else:
     st.warning("No CSV files found in `csv_data` folder.")
