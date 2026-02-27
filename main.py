@@ -4,7 +4,7 @@ import glob
 import os
 
 # 1. Page Configuration
-st.set_page_config(page_title="Best Rate Portal", layout="wide", page_icon="🌐")
+st.set_page_config(page_title="Best Rate Portal", layout="wide", page_icon="🔗📝")
 
 # 2. Function to Load and Combine all CSVs
 @st.cache_data(ttl=60)
@@ -32,19 +32,19 @@ def load_all_data():
             # Clean domain names
             combined_df['Publisher'] = combined_df['Publisher'].astype(str).str.strip().str.lower()
             
-            # Convert Price to numeric for accurate sorting across different files
+            # Convert Price to numeric
             if 'Price 1st' in combined_df.columns:
                 combined_df['Price_Numeric'] = pd.to_numeric(
                     combined_df['Price 1st'].astype(str).str.replace(r'[$,]', '', regex=True), 
                     errors='coerce'
                 )
             
-            # --- NEW ADDITION: Remove duplicates to ensure 1st and 2nd best are unique ---
-            # This drops rows where Publisher, Type, and Price are identical
-            combined_df = combined_df.drop_duplicates(subset=['Publisher', 'Type', 'Price_Numeric'])
-            
-            # Sort by Domain, Type, and then Price (Cheapest at the top)
+            # SORT FIRST: Cheapest price at the top
             combined_df = combined_df.sort_values(by=['Publisher', 'Type', 'Price_Numeric'], ascending=True)
+            
+            # REMOVE DUPLICATES: Only keep unique combinations of Domain, Type, Price, and Vendor
+            # This ensures "2nd Best" is actually a different entry
+            combined_df = combined_df.drop_duplicates(subset=['Publisher', 'Type', 'Price_Numeric', 'Best Seller 1st'])
             
         return combined_df
     return None
@@ -69,7 +69,6 @@ if df is not None:
         domain_results = df[df['Publisher'] == search_query]
 
         if not domain_results.empty:
-            # Common SEO Metrics
             base_info = domain_results.iloc[0]
             st.success(f"Results for: **{search_query}**")
             
@@ -86,16 +85,15 @@ if df is not None:
 
             left_col, right_col = st.columns(2)
 
-            # --- Logic to display Best vs 2nd Best from different CSV rows ---
             for col, link_type in zip([left_col, right_col], ['Guest Post', 'Link Insertion']):
                 with col:
                     st.header(f"{'📝' if 'Guest' in link_type else '🔗'} {link_type}")
                     
-                    # Filter for specific type
-                    type_data = domain_results[domain_results['Type'].str.contains(link_type, case=False, na=False)]
+                    # Ensure we filter correctly and reset index so iloc[0] and iloc[1] always work
+                    type_data = domain_results[domain_results['Type'].str.contains(link_type, case=False, na=False)].reset_index(drop=True)
                     
                     if not type_data.empty:
-                        # --- BEST OPTION (Row 1) ---
+                        # --- BEST OPTION ---
                         best_row = type_data.iloc[0]
                         with st.container(border=True):
                             st.subheader(f"🥇 Best Option")
@@ -105,8 +103,9 @@ if df is not None:
                             m1.metric("Price", f"${best_row.get('Price 1st', 'N/A')}")
                             m2.metric("Rating", f"⭐ {best_row.get('Rating 1st', 'N/A')}")
 
-                        # --- 2nd BEST OPTION (Row 2) ---
-                        if len(type_data) > 1:
+                        # --- 2nd BEST OPTION ---
+                        # We check if there is a second row available in the filtered data
+                        if len(type_data) >= 2:
                             second_row = type_data.iloc[1]
                             st.write("**🥈 2nd Best Option (Alternative Source)**")
                             with st.container(border=True):
