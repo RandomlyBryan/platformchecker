@@ -53,10 +53,10 @@ if df is not None:
     # --- SEARCH FORM WITH GO BUTTON ---
     with st.sidebar.form("search_form"):
         search_query = st.text_input("Enter Domain (e.g., reddit.com)").strip().lower()
-        # The 'Go' button handles the click, and 'Enter' key works automatically
         submit_button = st.form_submit_button("Go 🔍", use_container_width=True)
 
     if search_query:
+        # Filter data for the specific domain
         results = df[df['Publisher'] == search_query]
 
         if not results.empty:
@@ -65,7 +65,7 @@ if df is not None:
             
             st.success(f"Results for: **{search_query}**")
             
-            # --- SEO STATS SECTION (from your specific CSV format) ---
+            # --- SEO STATS SECTION ---
             with st.container(border=True):
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Authority (AS)", base_info.get('AS', 'N/A'))
@@ -73,7 +73,7 @@ if df is not None:
                 
                 # Format traffic numbers with commas
                 traffic = base_info.get('Total Organic Traffic', 0)
-                traffic_display = f"{int(traffic):,}" if pd.notna(traffic) else "N/A"
+                traffic_display = f"{int(traffic):,}" if pd.notna(traffic) and str(traffic).replace('.','').isdigit() else "N/A"
                 col3.metric("Total Traffic", traffic_display)
                 
                 col4.metric("Top Country", str(base_info.get('Top Country', 'N/A')).upper())
@@ -85,67 +85,70 @@ if df is not None:
             # Create two big columns for side-by-side comparison
             left_col, right_col = st.columns(2)
 
-            # --- LEFT COLUMN: GUEST POST ---
+            # --- LEFT COLUMN: GUEST POST (Single Window Only) ---
             with left_col:
                 st.header("📝 Guest Post")
                 guest_data = results[results['Type'].str.contains('Guest Post', case=False, na=False)]
+                
                 if not guest_data.empty:
-                    for _, row in guest_data.iterrows():
-                        with st.container(border=True):
-                            st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")
-                            
-                            m1, m2 = st.columns(2)
-                            m1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
-                            m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
-                            
-                            link_1 = row.get('Referral Link 1st', '#')
-                            if pd.notna(link_1) and str(link_1).startswith('http'):
-                                st.link_button("Order on Best Platform", link_1, use_container_width=True)
+                    # Logic: We take the first entry only to avoid multiple windows
+                    row = guest_data.iloc[0]
+                    with st.container(border=True):
+                        st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")
+                        
+                        m1, m2 = st.columns(2)
+                        m1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
+                        m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
+                        
+                        link_1 = row.get('Referral Link 1st', '#')
+                        if pd.notna(link_1) and str(link_1).startswith('http'):
+                            st.link_button("Order Guest Post", link_1, use_container_width=True)
 
-                            st.divider()
-                            st.write("**🥈 Alternatives**")
-                            a1, a2 = st.columns(2)
-                            a1.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
-                            a2.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
+                        st.divider()
+                        st.write("**🥈 Alternatives**")
+                        a1, a2 = st.columns(2)
+                        a1.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
+                        a2.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
                 else:
-                    st.info("No Guest Post data available.")
+                    st.info("No Guest Post data available for this domain.")
 
-            # --- RIGHT COLUMN: LINK INSERTION ---
+            # --- RIGHT COLUMN: LINK INSERTION (Single Window Only) ---
             with right_col:
                 st.header("🔗 Link Insertion")
                 link_data = results[results['Type'].str.contains('Link Insertion', case=False, na=False)]
+                
                 if not link_data.empty:
-                    for _, row in link_data.iterrows():
-                        with st.container(border=True):
-                            st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")
-                            
-                            m1, m2 = st.columns(2)
-                            m1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
-                            m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
-                            
-                            link_1 = row.get('Referral Link 1st', '#')
-                            if pd.notna(link_1) and str(link_1).startswith('http'):
-                                st.link_button("Order on Best Platform", link_1, use_container_width=True)
+                    # Logic: We take the first entry only to avoid multiple windows
+                    row = link_data.iloc[0]
+                    with st.container(border=True):
+                        st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")
+                        
+                        m1, m2 = st.columns(2)
+                        m1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
+                        m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
+                        
+                        link_1 = row.get('Referral Link 1st', '#')
+                        if pd.notna(link_1) and str(link_1).startswith('http'):
+                            st.link_button("Order Link Insertion", link_1, use_container_width=True)
 
-                            st.divider()
-                            st.write("**🥈 Alternatives**")
-                            b1, b2 = st.columns(2)
-                            b1.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
-                            b2.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
+                        st.divider()
+                        st.write("**🥈 Alternatives**")
+                        b1, b2 = st.columns(2)
+                        b1.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
+                        b2.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
                 else:
-                    st.info("No Link Insertion data available.")
+                    st.info("No Link Insertion data available for this domain.")
         else:
             st.error(f"No data found for '{search_query}'.")
     else:
+        # Dashboard Overview (Shown when no search is active)
         st.info("👈 Enter a domain in the sidebar to search.")
         
-        # Dashboard Overview
         st.subheader("Database Overview")
         s1, s2, s3 = st.columns(3)
         s1.metric("Total Records", len(df))
         s2.metric("Unique Domains", df['Publisher'].nunique())
         
-        # Calculate avg DR if column exists
         if 'DR' in df.columns:
             avg_dr = int(df['DR'].mean())
             s3.metric("Avg. Domain Rating", avg_dr)
