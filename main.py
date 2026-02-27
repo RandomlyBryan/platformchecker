@@ -15,6 +15,7 @@ def load_all_data():
         os.makedirs(path)
         return None
 
+    # Find all CSV files (handles .csv and .CSV)
     all_files = glob.glob(os.path.join(path, "*.csv")) + glob.glob(os.path.join(path, "*.CSV"))
     
     if not all_files:
@@ -31,26 +32,30 @@ def load_all_data():
     
     if df_list:
         combined_df = pd.concat(df_list, ignore_index=True)
+        # Clean up Domain column: Remove spaces and make lowercase for easy searching
         if 'Publisher' in combined_df.columns:
             combined_df['Publisher'] = combined_df['Publisher'].astype(str).str.strip().str.lower()
         return combined_df
     return None
 
 # 3. App Interface
-st.title("🌐 Best Rate Checker")
-st.markdown("Compare Guest Post and Link Insertion prices side-by-side.")
+st.title("🌐 Links Team Best Rate Checker")
 
 df = load_all_data()
 
 if df is not None:
-    # Sidebar for Search
+    # --- SIDEBAR ---
     st.sidebar.header("Search Filters")
-    unique_files = df['Source_File'].unique()
-    st.sidebar.info(f"Connected to {len(unique_files)} CSV files.")
     
+    # Search Input
     search_query = st.sidebar.text_input("Enter Domain (e.g., lifeunexpected.co.uk)").strip().lower()
 
+    # Hidden toggle for admin use to see raw data
+    show_raw_data = st.sidebar.checkbox("Show Full Database")
+
+    # --- MAIN CONTENT ---
     if search_query:
+        # Filter the master dataframe
         results = df[df['Publisher'] == search_query]
 
         if not results.empty:
@@ -110,17 +115,19 @@ if df is not None:
                     st.info("No Link Insertion data found for this site.")
         else:
             st.error(f"No data found for '{search_query}'.")
-    else:
+            
+    # Show welcome message if no search has been performed
+    elif not show_raw_data:
         st.info("👈 Enter a publisher domain in the sidebar to begin.")
-        
-        # Dashboard Overview
-        st.subheader("Database Overview")
-        s1, s2, s3 = st.columns(3)
-        s1.metric("Total Records", len(df))
-        s2.metric("Unique Domains", df['Publisher'].nunique())
-        s3.metric("Source Files", len(unique_files))
-        
-        st.write("### Data Preview")
-        st.dataframe(df.head(50))
+        st.write("---")
+        st.caption("Developed for the Link Building Team")
+
+    # This part shows only if the checkbox in the sidebar is checked
+    if show_raw_data:
+        st.divider()
+        st.subheader("📊 Full Database View")
+        st.dataframe(df)
+
 else:
     st.warning("No CSV files found in the `csv_data` folder.")
+    st.info("Please add your CSV files to the `csv_data` folder and refresh the page.")
