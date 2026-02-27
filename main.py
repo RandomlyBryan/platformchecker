@@ -4,7 +4,7 @@ import glob
 import os
 
 # 1. Page Configuration
-st.set_page_config(page_title="Team Publisher Portal", layout="wide")
+st.set_page_config(page_title="Best Rate Portal", layout="wide")
 
 # 2. Function to Load and Combine all CSVs
 @st.cache_data(ttl=60)
@@ -39,7 +39,7 @@ def load_all_data():
     return None
 
 # 3. App Interface
-st.title("🌐 Team Publisher Data Portal")
+st.title("📝🔗 Best Rate Provider")
 st.markdown("Side-by-side comparison of Guest Posts and Link Insertions with SEO Metrics.")
 
 df = load_all_data()
@@ -157,3 +157,4 @@ if df is not None:
         st.dataframe(df.head(50), hide_index=True)
 else:
     st.warning("No CSV files found. Please place your CSV files in the `csv_data` folder.")
+
