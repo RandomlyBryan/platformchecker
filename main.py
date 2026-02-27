@@ -37,19 +37,19 @@ def load_all_data():
     return None
 
 # 3. App Interface
-st.title("🌐 Best Rate Checker")
+st.title("🌐 Global Best Rate Checker)
 
 df = load_all_data()
 
 if df is not None:
     # --- SIDEBAR ---
     st.sidebar.header("Search Filters")
-    unique_files = df['Source_File'].unique()
-    st.sidebar.info(f"Connected to {len(unique_files)} CSV files.")
+    
+    # Removed the "Connected to X files" info box from here
     
     search_query = st.sidebar.text_input("Enter Domain (e.g., lifeunexpected.co.uk)").strip().lower()
 
-    # Hidden toggle for admins/you to see the raw data if needed
+    # Hidden toggle for admin use
     show_raw_data = st.sidebar.checkbox("Show Full Database")
 
     # --- MAIN CONTENT ---
@@ -59,7 +59,7 @@ if df is not None:
         if not results.empty:
             st.success(f"Showing results for **{search_query}**")
             
-            # Create two big columns for side-by-side layout
+            # Create two columns for side-by-side layout
             left_col, right_col = st.columns(2)
 
             # --- LEFT COLUMN: GUEST POST ---
@@ -107,20 +107,18 @@ if df is not None:
                             b1, b2 = st.columns(2)
                             with b1:
                                 st.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
-                            with b2:
+                            with a2:
                                 st.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
                 else:
                     st.info("No Link Insertion data found for this site.")
         else:
             st.error(f"No data found for '{search_query}'.")
 
-    # This part only shows if the search is empty AND the user hasn't checked "Show Full Database"
     elif not show_raw_data:
-        st.info("👈 Enter a publisher domain in the sidebar to begin searching the database.")
+        st.info("👈 Enter a publisher domain in the sidebar to begin searching.")
         st.write("---")
         st.caption("Developed for the Link Building Team")
 
-    # This part shows only if the checkbox in the sidebar is checked
     if show_raw_data:
         st.divider()
         st.subheader("📊 Full Database View")
