@@ -4,7 +4,7 @@ import glob
 import os
 
 # 1. Page Configuration
-st.set_page_config(page_title="Team Publisher Portal", layout="wide")
+st.set_page_config(page_title="Best Rate Portal", layout="wide")
 
 # 2. Function to Load and Combine all CSVs
 @st.cache_data(ttl=60)  # Refresh data every 60 seconds
@@ -37,7 +37,7 @@ def load_all_data():
     return None
 
 # 3. App Interface
-st.title("🌐 Team Publisher Data Portal")
+st.title("🌐 Best Rate Portal")
 st.markdown("Compare Guest Post and Link Insertion prices side-by-side.")
 
 df = load_all_data()
@@ -48,7 +48,11 @@ if df is not None:
     unique_files = df['Source_File'].unique()
     st.sidebar.info(f"Connected to {len(unique_files)} CSV files.")
     
-    search_query = st.sidebar.text_input("Enter Domain (e.g., lifeunexpected.co.uk)").strip().lower()
+    # --- Search Form with "Go" Button ---
+    with st.sidebar.form("search_form"):
+        search_query = st.text_input("Enter Domain (e.g., lifeunexpected.co.uk)").strip().lower()
+        # The submit button allows clicking "Go" or pressing "Enter"
+        submit_button = st.form_submit_button("Go 🔍", use_container_width=True)
 
     if search_query:
         results = df[df['Publisher'] == search_query]
