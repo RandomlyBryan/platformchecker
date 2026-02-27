@@ -37,7 +37,7 @@ def load_all_data():
     return None
 
 # 3. App Interface
-st.title("🌐 Team Publisher Data Portal")
+st.title("🌐 Best Rate Checker")
 st.markdown("Compare Guest Post and Link Insertion prices side-by-side.")
 
 df = load_all_data()
@@ -124,3 +124,4 @@ if df is not None:
         st.dataframe(df.head(50))
 else:
     st.warning("No CSV files found in the `csv_data` folder.")
+
