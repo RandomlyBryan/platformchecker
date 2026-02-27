@@ -7,7 +7,7 @@ import os
 st.set_page_config(page_title="Team Publisher Portal", layout="wide")
 
 # 2. Function to Load and Combine all CSVs
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60)  # Refresh data every 60 seconds
 def load_all_data():
     path = 'csv_data'
     
@@ -38,28 +38,25 @@ def load_all_data():
 
 # 3. App Interface
 st.title("🌐 Best Rate Checker")
+st.markdown("Compare Guest Post and Link Insertion prices side-by-side.")
 
 df = load_all_data()
 
 if df is not None:
-    # --- SIDEBAR ---
+    # Sidebar for Search
     st.sidebar.header("Search Filters")
-    
-    # Removed the "Connected to X files" info box from here
+    unique_files = df['Source_File'].unique()
+    st.sidebar.info(f"Connected to {len(unique_files)} CSV files.")
     
     search_query = st.sidebar.text_input("Enter Domain (e.g., lifeunexpected.co.uk)").strip().lower()
 
-    # Hidden toggle for admin use
-    show_raw_data = st.sidebar.checkbox("Show Full Database")
-
-    # --- MAIN CONTENT ---
     if search_query:
         results = df[df['Publisher'] == search_query]
 
         if not results.empty:
             st.success(f"Showing results for **{search_query}**")
             
-            # Create two columns for side-by-side layout
+            # Create two big columns for the side-by-side layout
             left_col, right_col = st.columns(2)
 
             # --- LEFT COLUMN: GUEST POST ---
@@ -107,22 +104,23 @@ if df is not None:
                             b1, b2 = st.columns(2)
                             with b1:
                                 st.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
-                            with a2:
+                            with b2:
                                 st.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
                 else:
                     st.info("No Link Insertion data found for this site.")
         else:
             st.error(f"No data found for '{search_query}'.")
-
-    elif not show_raw_data:
-        st.info("👈 Enter a publisher domain in the sidebar to begin searching.")
-        st.write("---")
-        st.caption("Developed for the Link Building Team")
-
-    if show_raw_data:
-        st.divider()
-        st.subheader("📊 Full Database View")
-        st.dataframe(df)
-
+    else:
+        st.info("👈 Enter a publisher domain in the sidebar to begin.")
+        
+        # Dashboard Overview
+        st.subheader("Database Overview")
+        s1, s2, s3 = st.columns(3)
+        s1.metric("Total Records", len(df))
+        s2.metric("Unique Domains", df['Publisher'].nunique())
+        s3.metric("Source Files", len(unique_files))
+        
+        st.write("### Data Preview")
+        st.dataframe(df.head(50))
 else:
     st.warning("No CSV files found in the `csv_data` folder.")
