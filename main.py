@@ -11,12 +11,10 @@ st.set_page_config(page_title="Team Publisher Portal", layout="wide")
 def load_all_data():
     path = 'csv_data'
     
+    # Ensure directory exists
     if not os.path.exists(path):
         os.makedirs(path)
-        # For local testing, if the folder is empty but a file was provided:
-        # return pd.read_csv('Inventory_2026-02-27_15-12-56_PM.csv')
-        return None
-
+    
     all_files = glob.glob(os.path.join(path, "*.csv")) + glob.glob(os.path.join(path, "*.CSV"))
     
     if not all_files:
@@ -25,7 +23,8 @@ def load_all_data():
     df_list = []
     for f in all_files:
         try:
-            temp_df = pd.read_csv(f)
+            # We use low_memory=False to handle mixed types in large inventory files
+            temp_df = pd.read_csv(f, low_memory=False)
             temp_df['Source_File'] = os.path.basename(f)
             df_list.append(temp_df)
         except Exception as e:
@@ -34,46 +33,52 @@ def load_all_data():
     if df_list:
         combined_df = pd.concat(df_list, ignore_index=True)
         if 'Publisher' in combined_df.columns:
+            # Clean domain names for exact matching
             combined_df['Publisher'] = combined_df['Publisher'].astype(str).str.strip().str.lower()
         return combined_df
     return None
 
 # 3. App Interface
 st.title("🌐 Team Publisher Data Portal")
-st.markdown("Compare Guest Post and Link Insertion prices with SEO metrics.")
+st.markdown("Side-by-side comparison of Guest Posts and Link Insertions with SEO Metrics.")
 
 df = load_all_data()
 
 if df is not None:
     # Sidebar for Search
     st.sidebar.header("Search Filters")
-    unique_files = df['Source_File'].unique() if 'Source_File' in df.columns else ["Uploaded File"]
-    st.sidebar.info(f"Connected to {len(unique_files)} CSV source(s).")
+    unique_files = df['Source_File'].unique()
+    st.sidebar.info(f"Connected to {len(unique_files)} CSV files.")
     
     # --- SEARCH FORM WITH GO BUTTON ---
     with st.sidebar.form("search_form"):
         search_query = st.text_input("Enter Domain (e.g., reddit.com)").strip().lower()
-        # This button allows both clicking "Go" and pressing the "Enter" key
+        # The 'Go' button handles the click, and 'Enter' key works automatically
         submit_button = st.form_submit_button("Go 🔍", use_container_width=True)
 
     if search_query:
         results = df[df['Publisher'] == search_query]
 
         if not results.empty:
-            # Get common metrics from the first matching row
+            # Extract common metrics from the first record found
             base_info = results.iloc[0]
             
             st.success(f"Results for: **{search_query}**")
             
-            # --- NEW: SITE METRICS SECTION ---
-            with st.expander("📊 View Site SEO Stats", expanded=True):
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Authority Score (AS)", base_info.get('AS', 'N/A'))
-                m2.metric("Domain Rating (DR)", base_info.get('DR', 'N/A'))
-                m3.metric("Total Traffic", f"{base_info.get('Total Organic Traffic', 0):,}")
-                m4.metric("Top Country", base_info.get('Top Country', 'N/A').upper())
+            # --- SEO STATS SECTION (from your specific CSV format) ---
+            with st.container(border=True):
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Authority (AS)", base_info.get('AS', 'N/A'))
+                col2.metric("Domain Rating (DR)", base_info.get('DR', 'N/A'))
                 
-                st.write(f"**Category:** {base_info.get('Category', 'General')} | **Link Type:** {base_info.get('Link Follow', 'N/A')}")
+                # Format traffic numbers with commas
+                traffic = base_info.get('Total Organic Traffic', 0)
+                traffic_display = f"{int(traffic):,}" if pd.notna(traffic) else "N/A"
+                col3.metric("Total Traffic", traffic_display)
+                
+                col4.metric("Top Country", str(base_info.get('Top Country', 'N/A')).upper())
+                
+                st.caption(f"**Category:** {base_info.get('Category', 'N/A')} | **Link Type:** {base_info.get('Link Follow', 'N/A')}")
 
             st.divider()
 
@@ -87,26 +92,23 @@ if df is not None:
                 if not guest_data.empty:
                     for _, row in guest_data.iterrows():
                         with st.container(border=True):
-                            st.subheader("🏆 Best Platform")
-                            st.write(f"**{row.get('Best Seller 1st', 'N/A')}**")
+                            st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")
                             
-                            c1, c2 = st.columns(2)
-                            c1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
-                            c2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
+                            m1, m2 = st.columns(2)
+                            m1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
+                            m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
                             
                             link_1 = row.get('Referral Link 1st', '#')
                             if pd.notna(link_1) and str(link_1).startswith('http'):
                                 st.link_button("Order on Best Platform", link_1, use_container_width=True)
 
                             st.divider()
-                            st.subheader("🥈 Alternatives")
+                            st.write("**🥈 Alternatives**")
                             a1, a2 = st.columns(2)
-                            with a1:
-                                st.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
-                            with a2:
-                                st.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
+                            a1.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
+                            a2.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
                 else:
-                    st.info("No Guest Post data found.")
+                    st.info("No Guest Post data available.")
 
             # --- RIGHT COLUMN: LINK INSERTION ---
             with right_col:
@@ -115,39 +117,40 @@ if df is not None:
                 if not link_data.empty:
                     for _, row in link_data.iterrows():
                         with st.container(border=True):
-                            st.subheader("🏆 Best Platform")
-                            st.write(f"**{row.get('Best Seller 1st', 'N/A')}**")
+                            st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")
                             
-                            c1, c2 = st.columns(2)
-                            c1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
-                            c2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
+                            m1, m2 = st.columns(2)
+                            m1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
+                            m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
                             
                             link_1 = row.get('Referral Link 1st', '#')
                             if pd.notna(link_1) and str(link_1).startswith('http'):
                                 st.link_button("Order on Best Platform", link_1, use_container_width=True)
 
                             st.divider()
-                            st.subheader("🥈 Alternatives")
+                            st.write("**🥈 Alternatives**")
                             b1, b2 = st.columns(2)
-                            with b1:
-                                st.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
-                            with b2:
-                                st.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
+                            b1.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
+                            b2.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
                 else:
-                    st.info("No Link Insertion data found.")
+                    st.info("No Link Insertion data available.")
         else:
-            st.error(f"No data found for '{search_query}'. Please check the spelling or domain extension.")
+            st.error(f"No data found for '{search_query}'.")
     else:
-        st.info("👈 Enter a publisher domain (e.g., yahoo.com) in the sidebar and click Go.")
+        st.info("👈 Enter a domain in the sidebar to search.")
         
         # Dashboard Overview
         st.subheader("Database Overview")
         s1, s2, s3 = st.columns(3)
         s1.metric("Total Records", len(df))
         s2.metric("Unique Domains", df['Publisher'].nunique())
-        s3.metric("Avg. DR", int(df['DR'].mean()) if 'DR' in df.columns else 0)
         
-        st.write("### Recent Data (Top 50)")
+        # Calculate avg DR if column exists
+        if 'DR' in df.columns:
+            avg_dr = int(df['DR'].mean())
+            s3.metric("Avg. Domain Rating", avg_dr)
+        
+        st.write("### Latest Entries")
         st.dataframe(df.head(50), hide_index=True)
 else:
-    st.warning("No CSV files found in the `csv_data` folder. Please add files to begin.")
+    st.warning("No CSV files found. Please place your CSV files in the `csv_data` folder.")
