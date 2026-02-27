@@ -37,7 +37,7 @@ def load_all_data():
     return None
 
 # 3. App Interface
-st.title("🌐 Global Best Rate Checker)
+st.title("🌐 Best Rate Checker")
 
 df = load_all_data()
 
