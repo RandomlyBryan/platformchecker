@@ -7,7 +7,7 @@ import os
 st.set_page_config(page_title="Team Publisher Portal", layout="wide")
 
 # 2. Function to Load and Combine all CSVs
-@st.cache_data(ttl=60)  # Refresh data every 60 seconds
+@st.cache_data(ttl=60)
 def load_all_data():
     path = 'csv_data'
     
@@ -38,25 +38,28 @@ def load_all_data():
 
 # 3. App Interface
 st.title("🌐 Best Rate Checker")
-st.markdown("Compare Guest Post and Link Insertion prices side-by-side.")
 
 df = load_all_data()
 
 if df is not None:
-    # Sidebar for Search
+    # --- SIDEBAR ---
     st.sidebar.header("Search Filters")
     unique_files = df['Source_File'].unique()
     st.sidebar.info(f"Connected to {len(unique_files)} CSV files.")
     
     search_query = st.sidebar.text_input("Enter Domain (e.g., lifeunexpected.co.uk)").strip().lower()
 
+    # Hidden toggle for admins/you to see the raw data if needed
+    show_raw_data = st.sidebar.checkbox("Show Full Database")
+
+    # --- MAIN CONTENT ---
     if search_query:
         results = df[df['Publisher'] == search_query]
 
         if not results.empty:
             st.success(f"Showing results for **{search_query}**")
             
-            # Create two big columns for the side-by-side layout
+            # Create two big columns for side-by-side layout
             left_col, right_col = st.columns(2)
 
             # --- LEFT COLUMN: GUEST POST ---
@@ -110,18 +113,18 @@ if df is not None:
                     st.info("No Link Insertion data found for this site.")
         else:
             st.error(f"No data found for '{search_query}'.")
-    else:
-        st.info("👈 Enter a publisher domain in the sidebar to begin.")
-        
-        # Dashboard Overview
-        st.subheader("Database Overview")
-        s1, s2, s3 = st.columns(3)
-        s1.metric("Total Records", len(df))
-        s2.metric("Unique Domains", df['Publisher'].nunique())
-        s3.metric("Source Files", len(unique_files))
-        
-        st.write("### Data Preview")
-        st.dataframe(df.head(50))
+
+    # This part only shows if the search is empty AND the user hasn't checked "Show Full Database"
+    elif not show_raw_data:
+        st.info("👈 Enter a publisher domain in the sidebar to begin searching the database.")
+        st.write("---")
+        st.caption("Developed for the Link Building Team")
+
+    # This part shows only if the checkbox in the sidebar is checked
+    if show_raw_data:
+        st.divider()
+        st.subheader("📊 Full Database View")
+        st.dataframe(df)
+
 else:
     st.warning("No CSV files found in the `csv_data` folder.")
-
