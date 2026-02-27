@@ -54,7 +54,7 @@ if df is not None:
     with st.sidebar.form("search_form"):
         search_query = st.text_input("Enter Domain (e.g., reddit.com)").strip().lower()
         # This button allows both clicking "Go" and pressing the "Enter" key
-        submit_button = st.form_submit_button("Go 🔍", use_container_width=True)
+        submit_button = st.form_submit_button("Search 🔍", use_container_width=True)
 
     if search_query:
         results = df[df['Publisher'] == search_query]
@@ -151,3 +151,4 @@ if df is not None:
         st.dataframe(df.head(50), hide_index=True)
 else:
     st.warning("No CSV files found in the `csv_data` folder. Please add files to begin.")
+
