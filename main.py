@@ -101,11 +101,12 @@ if df is not None:
                             m1.metric("Price", f"${best_row.get('Price 1st', 'N/A')}")
                             m2.metric("Rating", f"⭐ {best_row.get('Rating 1st', 'N/A')}")
                             
-                            link = best_row.get('Referral Link 1st', '#')
-                            if pd.notna(link) and str(link).startswith('http'):
-                                st.link_button(f"Order via {best_row.get('Source_File')}", link, use_container_width=True)
+                            # REMOVED: Order via button / Source Info
+                            # link = best_row.get('Referral Link 1st', '#')
+                            # if pd.notna(link) and str(link).startswith('http'):
+                            #     st.link_button(f"Order via {best_row.get('Source_File')}", link, use_container_width=True)
 
-                        # --- 2nd BEST OPTION (Row 2 from a different CSV or entry) ---
+                        # --- 2nd BEST OPTION (Row 2) ---
                         if len(type_data) > 1:
                             second_row = type_data.iloc[1]
                             st.write("**🥈 2nd Best Option (Alternative Source)**")
@@ -113,12 +114,13 @@ if df is not None:
                                 st.write(f"**Vendor:** {second_row.get('Best Seller 1st', 'N/A')}")
                                 a1, a2 = st.columns(2)
                                 a1.info(f"Price: **${second_row.get('Price 1st', 'N/A')}**")
-                                a2.info(f"Source: {second_row['Source_File']}")
+                                # REMOVED: Source metric
+                                # a2.info(f"Source: {second_row['Source_File']}")
                                 
-                                # Optional link for the 2nd option
-                                link2 = second_row.get('Referral Link 1st', '#')
-                                if pd.notna(link2) and str(link2).startswith('http'):
-                                    st.link_button(f"Order via {second_row.get('Source_File')}", link2, use_container_width=True)
+                                # REMOVED: Order via button
+                                # link2 = second_row.get('Referral Link 1st', '#')
+                                # if pd.notna(link2) and str(link2).startswith('http'):
+                                #     st.link_button(f"Order via {second_row.get('Source_File')}", link2, use_container_width=True)
                         else:
                             st.caption("No alternative sources found for this domain.")
                     else:
