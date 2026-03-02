@@ -2,75 +2,134 @@ import streamlit as st
 import pandas as pd
 import glob
 import os
+
 st.set_page_config(page_title="Best Rate Portal", layout="wide")
+
 @st.cache_data(ttl=60)
 def load_all_data():
     path = 'csv_data'
     if not os.path.exists(path):
         os.makedirs(path)
+    
     all_files = glob.glob(os.path.join(path, "*.csv")) + glob.glob(os.path.join(path, "*.CSV"))
     if not all_files:
         return None
+    
     df_list = []
     for f in all_files:
         try:
+            # Read the file
             temp_df = pd.read_csv(f, low_memory=False)
+            
+            # --- CUSTOM MAPPING FOR NEW CSV FORMAT (A, D, AD) ---
+            # Check if the file matches the new format (no 'Publisher' header but has 30+ columns)
+            if 'Publisher' not in temp_df.columns and len(temp_df.columns) >= 30:
+                mapped_df = pd.DataFrame()
+                mapped_df['Publisher'] = temp_df.iloc[:, 0]        # Column A
+                mapped_df['Price 1st'] = temp_df.iloc[:, 3]        # Column D
+                mapped_df['Referral Link 1st'] = temp_df.iloc[:, 29] # Column AD
+                
+                # Fill missing columns with defaults so UI doesn't crash
+                mapped_df['Type'] = 'Guest Post' 
+                mapped_df['Best Seller 1st'] = 'Direct Sheet Source'
+                mapped_df['Rating 1st'] = 'N/A'
+                
+                # Transfer other SEO metrics if they exist in standard positions, else N/A
+                mapped_df['DR'] = temp_df.iloc[:, 1] if len(temp_df.columns) > 1 else 0
+                
+                temp_df = mapped_df
+            # ----------------------------------------------------
+
             temp_df['Source_File'] = os.path.basename(f)
             df_list.append(temp_df)
         except Exception as e:
             st.error(f"Error reading {f}: {e}")
+
     if df_list:
         combined_df = pd.concat(df_list, ignore_index=True)
+        
+        # Standardize Publisher name for searching
         if 'Publisher' in combined_df.columns:
             combined_df['Publisher'] = combined_df['Publisher'].astype(str).str.strip().str.lower()
+        
+        # SORTING LOGIC: Ensure the cheapest price is always at the top (index 0)
+        if 'Price 1st' in combined_df.columns:
+            # Strip '$' and commas, then convert to numeric for accurate sorting
+            combined_df['temp_price'] = pd.to_numeric(
+                combined_df['Price 1st'].astype(str).str.replace('$', '').str.replace(',', ''), 
+                errors='coerce'
+            )
+            # Sort by Domain then Price (ascending)
+            combined_df = combined_df.sort_values(by=['Publisher', 'temp_price'], ascending=[True, True])
+            
         return combined_df
     return None
+
 st.title("📝🔗 Best Rate Provider")
 st.markdown("Side-by-side comparison of Guest Posts and Link Insertions with SEO Metrics.")
+
 df = load_all_data()
+
 if df is not None:
     st.sidebar.header("Search Filters")
     unique_files = df['Source_File'].unique()
     st.sidebar.info(f"Connected to {len(unique_files)} CSV files.")
+    
     with st.sidebar.form("search_form"):
         search_query = st.text_input("Enter Domain (e.g., reddit.com)").strip().lower()
         submit_button = st.form_submit_button("Go 🔍", use_container_width=True)
+
     if search_query:
+        # Filter results for the specific domain
         results = df[df['Publisher'] == search_query]
+        
         if not results.empty:
+            # Because we sorted by 'temp_price' in load_all_data, 
+            # results.iloc[0] is automatically the cheapest record found.
             base_info = results.iloc[0] 
+            
             st.success(f"Results for: **{search_query}**")  
+            
             with st.container(border=True):
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Authority (AS)", base_info.get('AS', 'N/A'))
                 col2.metric("Domain Rating (DR)", base_info.get('DR', 'N/A'))          
+                
                 traffic = base_info.get('Total Organic Traffic', 0)
                 traffic_display = f"{int(traffic):,}" if pd.notna(traffic) and str(traffic).replace('.','').isdigit() else "N/A"
                 col3.metric("Total Traffic", traffic_display)
+                
                 col4.metric("Top Country", str(base_info.get('Top Country', 'N/A')).upper())        
-                st.caption(f"**Category:** {base_info.get('Category', 'N/A')} | **Link Type:** {base_info.get('Link Follow', 'N/A')}")
+                st.caption(f"**Source File:** {base_info.get('Source_File')} | **Link Type:** {base_info.get('Link Follow', 'N/A')}")
+
             st.divider()
+
             left_col, right_col = st.columns(2)
+
             with left_col:
                 st.header("📝 Guest Post")
                 guest_data = results[results['Type'].str.contains('Guest Post', case=False, na=False)]
                 if not guest_data.empty:
+                    # After filtering by type, the first row is the cheapest of that type
                     row = guest_data.iloc[0]
                     with st.container(border=True):
                         st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")
                         m1, m2 = st.columns(2)
-                        m1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
+                        m1.metric("Lowest Price", f"${row.get('Price 1st', 'N/A')}")
                         m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")         
+                        
                         link_1 = row.get('Referral Link 1st', '#')
                         if pd.notna(link_1) and str(link_1).startswith('http'):
                             st.link_button("Order Guest Post", link_1, use_container_width=True)
+                        
                         st.divider()
                         st.write("**🥈 Alternatives**")
                         a1, a2 = st.columns(2)
                         a1.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
                         a2.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
                 else:
-                    st.info("No Guest Post data available for this domain.")
+                    st.info("No Guest Post data available.")
+
             with right_col:
                 st.header("🔗 Link Insertion")
                 link_data = results[results['Type'].str.contains('Link Insertion', case=False, na=False)]    
@@ -79,19 +138,20 @@ if df is not None:
                     with st.container(border=True):
                         st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")        
                         m1, m2 = st.columns(2)
-                        m1.metric("Price", f"${row.get('Price 1st', 'N/A')}")
+                        m1.metric("Lowest Price", f"${row.get('Price 1st', 'N/A')}")
                         m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
                         
                         link_1 = row.get('Referral Link 1st', '#')
                         if pd.notna(link_1) and str(link_1).startswith('http'):
                             st.link_button("Order Link Insertion", link_1, use_container_width=True)
+                        
                         st.divider()
                         st.write("**🥈 Alternatives**")
                         b1, b2 = st.columns(2)
                         b1.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
                         b2.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
                 else:
-                    st.info("No Link Insertion data available for this domain.")
+                    st.info("No Link Insertion data available.")
         else:
             st.error(f"No data found for '{search_query}'.")
     else:
@@ -101,10 +161,10 @@ if df is not None:
         s1.metric("Total Records", len(df))
         s2.metric("Unique Domains", df['Publisher'].nunique())        
         if 'DR' in df.columns:
-            avg_dr = int(df['DR'].mean())
+            avg_dr = int(pd.to_numeric(df['DR'], errors='coerce').mean() or 0)
             s3.metric("Avg. Domain Rating", avg_dr)      
-        st.write("### Latest Entries")
+        
+        st.write("### Latest Entries (Sorted by Price)")
         st.dataframe(df.head(50), hide_index=True)
 else:
     st.warning("No CSV files found. Please place your CSV files in the `csv_data` folder.")
-
