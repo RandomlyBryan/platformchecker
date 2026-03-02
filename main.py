@@ -31,7 +31,7 @@ def load_all_data():
                 
                 # Tag this specifically as "Own Source"
                 mapped_df['Source_Label'] = "Own Source"
-                mapped_df['Best Seller 1st'] = "Direct Provider"
+                mapped_df['Best Seller 1st'] = "MPE Premium Sheet"
                 
                 # Defaults to keep UI stable
                 mapped_df['Type'] = 'Guest Post' 
@@ -171,3 +171,4 @@ if df is not None:
         st.dataframe(df.drop(columns=['temp_price'], errors='ignore').head(100), hide_index=True)
 else:
     st.warning("No CSV files found. Please place your CSV files in the `csv_data` folder.")
+
