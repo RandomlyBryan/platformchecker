@@ -19,18 +19,14 @@ def load_all_data():
     for f in all_files:
         try:
             temp_df = pd.read_csv(f, low_memory=False)
-            file_name = os.path.basename(f)
             
             # --- CUSTOM MAPPING FOR NEW CSV FORMAT (A, D, AD) ---
-            # Identifies the new sheet by column count and lack of 'Publisher' header
             if 'Publisher' not in temp_df.columns and len(temp_df.columns) >= 30:
                 mapped_df = pd.DataFrame()
-                mapped_df['Publisher'] = temp_df.iloc[:, 0]        # Column A
-                mapped_df['Price 1st'] = temp_df.iloc[:, 3]        # Column D
+                mapped_df['Publisher'] = temp_df.iloc[:, 0]         # Column A
+                mapped_df['Price 1st'] = temp_df.iloc[:, 3]         # Column D
                 mapped_df['Referral Link 1st'] = temp_df.iloc[:, 29] # Column AD
                 
-                # Tag this specifically as "Own Source"
-                mapped_df['Source_Label'] = "Own Source"
                 mapped_df['Best Seller 1st'] = "MPE Premium Sheet"
                 
                 # Defaults to keep UI stable
@@ -39,11 +35,7 @@ def load_all_data():
                 mapped_df['DR'] = temp_df.iloc[:, 1] if len(temp_df.columns) > 1 else "N/A"
                 
                 temp_df = mapped_df
-            else:
-                # For original CSVs, label them by their filename or a generic tag
-                temp_df['Source_Label'] = "Marketplace"
 
-            temp_df['Source_File'] = file_name
             df_list.append(temp_df)
         except Exception as e:
             st.error(f"Error reading {f}: {e}")
@@ -72,8 +64,6 @@ df = load_all_data()
 
 if df is not None:
     st.sidebar.header("Search Filters")
-    unique_files = df['Source_File'].unique()
-    st.sidebar.info(f"Connected to {len(unique_files)} CSV files.")
     
     with st.sidebar.form("search_form"):
         search_query = st.text_input("Enter Domain (e.g., reddit.com)").strip().lower()
@@ -96,10 +86,6 @@ if df is not None:
                 col3.metric("Total Traffic", traffic_display)
                 
                 col4.metric("Top Country", str(base_info.get('Top Country', 'N/A')).upper())        
-                
-                # Display the "Own Source" or "Marketplace" detail here
-                source_tag = base_info.get('Source_Label', 'Standard')
-                st.caption(f"**Provider:** {source_tag} | **File:** {base_info.get('Source_File')}")
 
             st.divider()
 
@@ -111,13 +97,11 @@ if df is not None:
                 if not guest_data.empty:
                     row = guest_data.iloc[0]
                     with st.container(border=True):
-                        # Show label in the subheader if it's Own Source
-                        label_prefix = "⭐ [Own Source] " if row.get('Source_Label') == "Own Source" else "🥇 "
-                        st.subheader(f"{label_prefix}{row.get('Best Seller 1st', 'N/A')}")
+                        st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")
                         
                         m1, m2 = st.columns(2)
                         m1.metric("Best Price", f"${row.get('Price 1st', 'N/A')}")
-                        m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")         
+                        m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")          
                         
                         link_1 = row.get('Referral Link 1st', '#')
                         if pd.notna(link_1) and str(link_1).startswith('http'):
@@ -137,8 +121,7 @@ if df is not None:
                 if not link_data.empty:
                     row = link_data.iloc[0]
                     with st.container(border=True):
-                        label_prefix = "⭐ [Own Source] " if row.get('Source_Label') == "Own Source" else "🥇 "
-                        st.subheader(f"{label_prefix}{row.get('Best Seller 1st', 'N/A')}")        
+                        st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")        
                         
                         m1, m2 = st.columns(2)
                         m1.metric("Best Price", f"${row.get('Price 1st', 'N/A')}")
@@ -171,4 +154,3 @@ if df is not None:
         st.dataframe(df.drop(columns=['temp_price'], errors='ignore').head(100), hide_index=True)
 else:
     st.warning("No CSV files found. Please place your CSV files in the `csv_data` folder.")
-
