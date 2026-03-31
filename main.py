@@ -30,7 +30,6 @@ def save_or_update_platform(name, link, notes):
     path = 'platforms.csv'
     name_clean = name.strip()
     p_df = load_platforms()
-    
     new_row = pd.DataFrame([[name_clean, link.strip(), notes.strip()]], columns=['platform', 'link', 'notes'])
     
     if not p_df.empty and name_clean.lower() in p_df['platform'].str.lower().values:
@@ -84,10 +83,10 @@ def load_all_data():
 
 def show_copy_link(link, notes=None):
     if notes and str(notes).strip() and str(notes).lower() != 'nan':
-        st.warning(f"📝 **Negotiation Notes:** {notes}")
-    st.write("📋 **Copy Link:**")
+        st.warning(f"📝 {notes}")
+    st.write("📋 **Copy Dashboard Link:**")
     st.code(link, language=None)
-    st.link_button("Open Dashboard", link, use_container_width=True)
+    st.link_button("🚀 Open Dashboard", link, use_container_width=True)
 
 def show_platform_link(seller_name, p_df):
     name_clean = str(seller_name).lower().strip()
@@ -96,13 +95,10 @@ def show_platform_link(seller_name, p_df):
         row = match.iloc[0]
         show_copy_link(row['link'], row.get('notes', ""))
     else:
-        st.caption("No dashboard link mapped for this seller.")
+        st.caption("No dashboard link mapped.")
 
-# --- INITIALIZE ---
 df = load_all_data()
 p_df = load_platforms()
-
-st.title("📝🔗 Best Rate Provider")
 
 tab1, tab2 = st.tabs(["🔍 Search Portal", "⚙️ Manage Platforms"])
 
@@ -117,9 +113,8 @@ with tab1:
         direct_match = p_df[p_df['platform'].str.lower() == search_query]
         
         if not direct_match.empty:
-            st.success(f"Direct Negotiated Match Found: **{search_query}**")
+            st.success(f"Direct Negotiated Match: **{search_query}**")
             with st.container(border=True):
-                st.subheader("🤝 Negotiated")
                 match_row = direct_match.iloc[0]
                 show_copy_link(match_row['link'], match_row.get('notes', ""))
         else:
@@ -127,7 +122,7 @@ with tab1:
             
             if not results.empty:
                 base_info = results.iloc[0] 
-                st.success(f"CSV Results for: **{search_query}**")  
+                st.success(f"Marketplace Results for: **{search_query}**")  
                 
                 with st.container(border=True):
                     c1, c2, c3, c4 = st.columns(4)
@@ -141,25 +136,24 @@ with tab1:
                 l_col, r_col = st.columns(2)
                 for col, p_type in zip([l_col, r_col], ['Guest Post', 'Link Insertion']):
                     with col:
-                        st.header(f"{'📝' if p_type == 'Guest Post' else '🔗'} {p_type}")
+                        st.subheader(f"{'📝' if p_type == 'Guest Post' else '🔗'} {p_type}")
                         subset = results[results['Type'].str.contains(p_type, case=False, na=False)]
                         if not subset.empty:
                             row = subset.iloc[0]
                             with st.container(border=True):
                                 seller = row.get('Best Seller 1st', 'N/A')
-                                st.subheader(f"🥇 {seller}")
-                                m1, m2 = st.columns(2)
-                                m1.metric("Best Price", f"${row.get('Price 1st', 'N/A')}")
-                                m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
+                                t_col, p_col = st.columns([2, 1])
+                                t_col.markdown(f"### 🥇 {seller}")
+                                p_col.metric("Price", f"${row.get('Price 1st', 'N/A')}")
+                                st.divider()
                                 show_platform_link(seller, p_df)
                         else:
-                            st.info(f"No {p_type} data.")
+                            st.info(f"No {p_type} data found.")
             else:
                 st.error(f"No results found for '{search_query}'.")
 
 with tab2:
     st.header("Manage Negotiated Sites & Platforms")
-    
     mode = st.radio("Action", ["Add New", "Edit Existing"], horizontal=True)
     
     existing_name = ""
