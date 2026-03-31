@@ -76,16 +76,16 @@ def load_all_data():
         return combined_df
     return None
 
+def show_copy_link(link):
+    st.write("📋 **Copy Link:**")
+    st.code(link, language=None)
+    st.link_button("Open Dashboard", link, use_container_width=True)
+
 def show_platform_link(seller_name, p_df):
     name_clean = str(seller_name).lower().strip()
     match = p_df[p_df['platform'].str.lower().apply(lambda x: x in name_clean if pd.notna(x) else False)]
-    
     if not match.empty:
-        link = match.iloc[0]['link']
-        st.write("📋 **Copy Link:**")
-        # st.code provides a built-in copy button in the top right corner
-        st.code(link, language=None)
-        st.link_button("Open Dashboard", link, use_container_width=True)
+        show_copy_link(match.iloc[0]['link'])
     else:
         st.caption("No dashboard link mapped for this seller.")
 
@@ -104,44 +104,56 @@ with tab1:
 
     if raw_input:
         search_query = extract_domain(raw_input)
-        results = df[df['Publisher'] == search_query] if df is not None else pd.DataFrame()
         
-        if not results.empty:
-            base_info = results.iloc[0] 
-            st.success(f"Results for: **{search_query}**")  
-            
+        # --- NEW LOGIC: Check Manage Platforms First ---
+        direct_match = p_df[p_df['platform'].str.lower() == search_query]
+        
+        if not direct_match.empty:
+            st.success(f"Direct Negotiated Match Found: **{search_query}**")
             with st.container(border=True):
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("AS", base_info.get('AS', 'N/A'))
-                c2.metric("DR", base_info.get('DR', 'N/A'))          
-                c3.metric("Traffic", base_info.get('Total Organic Traffic', 'N/A'))
-                c4.metric("Top Country", str(base_info.get('Top Country', 'N/A')).upper())        
-
-            l_col, r_col = st.columns(2)
-            for col, p_type in zip([l_col, r_col], ['Guest Post', 'Link Insertion']):
-                with col:
-                    st.header(f"{'📝' if p_type == 'Guest Post' else '🔗'} {p_type}")
-                    subset = results[results['Type'].str.contains(p_type, case=False, na=False)]
-                    if not subset.empty:
-                        row = subset.iloc[0]
-                        with st.container(border=True):
-                            seller = row.get('Best Seller 1st', 'N/A')
-                            st.subheader(f"🥇 {seller}")
-                            m1, m2 = st.columns(2)
-                            m1.metric("Best Price", f"${row.get('Price 1st', 'N/A')}")
-                            m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
-                            show_platform_link(seller, p_df)
-                    else:
-                        st.info(f"No {p_type} data.")
+                st.subheader("🤝 Negotiated")
+                show_copy_link(direct_match.iloc[0]['link'])
         else:
-            st.error("No data found.")
+            # Fallback to CSV search
+            results = df[df['Publisher'] == search_query] if df is not None else pd.DataFrame()
+            
+            if not results.empty:
+                base_info = results.iloc[0] 
+                st.success(f"CSV Results for: **{search_query}**")  
+                
+                with st.container(border=True):
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("AS", base_info.get('AS', 'N/A'))
+                    c2.metric("DR", base_info.get('DR', 'N/A'))          
+                    c3.metric("Traffic", base_info.get('Total Organic Traffic', 'N/A'))
+                    c4.metric("Top Country", str(base_info.get('Top Country', 'N/A')).upper())        
+
+                l_col, r_col = st.columns(2)
+                for col, p_type in zip([l_col, r_col], ['Guest Post', 'Link Insertion']):
+                    with col:
+                        st.header(f"{'📝' if p_type == 'Guest Post' else '🔗'} {p_type}")
+                        subset = results[results['Type'].str.contains(p_type, case=False, na=False)]
+                        if not subset.empty:
+                            row = subset.iloc[0]
+                            with st.container(border=True):
+                                seller = row.get('Best Seller 1st', 'N/A')
+                                st.subheader(f"🥇 {seller}")
+                                m1, m2 = st.columns(2)
+                                m1.metric("Best Price", f"${row.get('Price 1st', 'N/A')}")
+                                m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
+                                show_platform_link(seller, p_df)
+                        else:
+                            st.info(f"No {p_type} data.")
+            else:
+                st.error(f"No results found for '{search_query}' in Negotiated list or CSV database.")
 
 with tab2:
     st.header("Add New Platform")
+    st.info("Adding a domain here (e.g. themazatlanpost.com) will prioritize it over CSV data in search results.")
     with st.form("add_platform_form", clear_on_submit=True):
-        new_name = st.text_input("Platform Name (e.g. Adsy)")
+        new_name = st.text_input("Platform/Domain Name (e.g. themazatlanpost.com)")
         new_link = st.text_input("Direct Dashboard Link")
-        add_btn = st.form_submit_button("Save Platform")
+        add_btn = st.form_submit_button("Save Negotiated Site")
         
         if add_btn and new_name and new_link:
             if save_platform(new_name, new_link):
@@ -151,5 +163,5 @@ with tab2:
                 st.warning("Platform already exists or error occurred.")
 
     st.divider()
-    st.subheader("Current Platform Map")
+    st.subheader("Current Negotiated Sites & Platforms")
     st.dataframe(p_df, use_container_width=True, hide_index=True)
