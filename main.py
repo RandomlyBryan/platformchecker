@@ -29,7 +29,6 @@ def save_platform(name, link):
     new_data = pd.DataFrame([[name.strip(), link.strip()]], columns=['platform', 'link'])
     if os.path.exists(path):
         existing_df = pd.read_csv(path)
-        # Prevent duplicates
         if name.strip().lower() not in existing_df.iloc[:, 0].str.lower().values:
             updated_df = pd.concat([existing_df, new_data], ignore_index=True)
             updated_df.to_csv(path, index=False)
@@ -80,14 +79,16 @@ def load_all_data():
 def show_platform_link(seller_name, p_df):
     name_clean = str(seller_name).lower().strip()
     match = p_df[p_df['platform'].str.lower().apply(lambda x: x in name_clean if pd.notna(x) else False)]
+    
     if not match.empty:
         link = match.iloc[0]['link']
-        st.info(f"🔗 **Platform Link:** `{link}`")
-        st.link_button(f"Open Dashboard", link, use_container_width=True)
+        st.write("📋 **Copy Link:**")
+        # st.code provides a built-in copy button in the top right corner
+        st.code(link, language=None)
+        st.link_button("Open Dashboard", link, use_container_width=True)
     else:
         st.caption("No dashboard link mapped for this seller.")
 
-# --- UI START ---
 st.title("📝🔗 Best Rate Provider")
 
 df = load_all_data()
