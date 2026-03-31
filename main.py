@@ -2,8 +2,15 @@ import streamlit as st
 import pandas as pd
 import glob
 import os
+import re
 
 st.set_page_config(page_title="Best Rate Portal", layout="wide")
+
+def extract_domain(url):
+    url = re.sub(r'^https?://', '', url)
+    url = re.sub(r'^www\.', '', url)
+    url = url.split('/')[0]
+    return url.strip().lower()
 
 @st.cache_data(ttl=60)
 def load_all_data():
@@ -20,20 +27,15 @@ def load_all_data():
         try:
             temp_df = pd.read_csv(f, low_memory=False)
             
-            # --- CUSTOM MAPPING FOR NEW CSV FORMAT (A, D, AD) ---
             if 'Publisher' not in temp_df.columns and len(temp_df.columns) >= 30:
                 mapped_df = pd.DataFrame()
-                mapped_df['Publisher'] = temp_df.iloc[:, 0]         # Column A
-                mapped_df['Price 1st'] = temp_df.iloc[:, 3]         # Column D
-                mapped_df['Referral Link 1st'] = temp_df.iloc[:, 29] # Column AD
-                
+                mapped_df['Publisher'] = temp_df.iloc[:, 0]
+                mapped_df['Price 1st'] = temp_df.iloc[:, 3]
+                mapped_df['Referral Link 1st'] = temp_df.iloc[:, 29]
                 mapped_df['Best Seller 1st'] = "MPE Premium Sheet"
-                
-                # Defaults to keep UI stable
                 mapped_df['Type'] = 'Guest Post' 
                 mapped_df['Rating 1st'] = 'N/A'
                 mapped_df['DR'] = temp_df.iloc[:, 1] if len(temp_df.columns) > 1 else "N/A"
-                
                 temp_df = mapped_df
 
             df_list.append(temp_df)
@@ -44,9 +46,8 @@ def load_all_data():
         combined_df = pd.concat(df_list, ignore_index=True)
         
         if 'Publisher' in combined_df.columns:
-            combined_df['Publisher'] = combined_df['Publisher'].astype(str).str.strip().str.lower()
+            combined_df['Publisher'] = combined_df['Publisher'].astype(str).apply(extract_domain)
         
-        # Sort by price so iloc[0] is always the cheapest
         if 'Price 1st' in combined_df.columns:
             combined_df['temp_price'] = pd.to_numeric(
                 combined_df['Price 1st'].astype(str).str.replace('$', '').str.replace(',', ''), 
@@ -66,10 +67,11 @@ if df is not None:
     st.sidebar.header("Search Filters")
     
     with st.sidebar.form("search_form"):
-        search_query = st.text_input("Enter Domain (e.g., reddit.com)").strip().lower()
+        raw_input = st.text_input("Enter Domain or URL (e.g., https://reddit.com)").strip()
         submit_button = st.form_submit_button("Go 🔍", use_container_width=True)
 
-    if search_query:
+    if raw_input:
+        search_query = extract_domain(raw_input)
         results = df[df['Publisher'] == search_query]
         
         if not results.empty:
@@ -84,11 +86,9 @@ if df is not None:
                 traffic = base_info.get('Total Organic Traffic', 0)
                 traffic_display = f"{int(traffic):,}" if pd.notna(traffic) and str(traffic).replace('.','').isdigit() else "N/A"
                 col3.metric("Total Traffic", traffic_display)
-                
                 col4.metric("Top Country", str(base_info.get('Top Country', 'N/A')).upper())        
 
             st.divider()
-
             left_col, right_col = st.columns(2)
 
             with left_col:
@@ -98,15 +98,12 @@ if df is not None:
                     row = guest_data.iloc[0]
                     with st.container(border=True):
                         st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")
-                        
                         m1, m2 = st.columns(2)
                         m1.metric("Best Price", f"${row.get('Price 1st', 'N/A')}")
                         m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")          
-                        
                         link_1 = row.get('Referral Link 1st', '#')
                         if pd.notna(link_1) and str(link_1).startswith('http'):
                             st.link_button("Order Guest Post", link_1, use_container_width=True)
-                        
                         st.divider()
                         st.write("**🥈 Alternatives**")
                         a1, a2 = st.columns(2)
@@ -122,15 +119,12 @@ if df is not None:
                     row = link_data.iloc[0]
                     with st.container(border=True):
                         st.subheader(f"🥇 {row.get('Best Seller 1st', 'N/A')}")        
-                        
                         m1, m2 = st.columns(2)
                         m1.metric("Best Price", f"${row.get('Price 1st', 'N/A')}")
                         m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
-                        
                         link_1 = row.get('Referral Link 1st', '#')
                         if pd.notna(link_1) and str(link_1).startswith('http'):
                             st.link_button("Order Link Insertion", link_1, use_container_width=True)
-                        
                         st.divider()
                         st.write("**🥈 Alternatives**")
                         b1, b2 = st.columns(2)
@@ -141,7 +135,7 @@ if df is not None:
         else:
             st.error(f"No data found for '{search_query}'.")
     else:
-        st.info("👈 Enter a domain in the sidebar to search.")        
+        st.info("👈 Enter a domain or URL in the sidebar to search.")        
         st.subheader("Database Overview")
         s1, s2, s3 = st.columns(3)
         s1.metric("Total Records", len(df))
