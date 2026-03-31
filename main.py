@@ -162,7 +162,7 @@ with tab1:
                 st.error(f"No results found for '{search_query}'.")
 
 with tab2:
-    st.header("Manage Negotiated Sites & Platforms")
+    st.header("Platform links")
     mode = st.radio("Action", ["Add New", "Edit Existing"], horizontal=True)
     existing_name, existing_link, existing_notes = "", "", ""
     if mode == "Edit Existing" and not p_df.empty:
