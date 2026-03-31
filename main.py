@@ -31,7 +31,6 @@ def save_or_update_platform(name, link, notes):
     name_clean = name.strip()
     p_df = load_platforms()
     new_row = pd.DataFrame([[name_clean, link.strip(), notes.strip()]], columns=['platform', 'link', 'notes'])
-    
     if not p_df.empty and name_clean.lower() in p_df['platform'].str.lower().values:
         p_df.loc[p_df['platform'].str.lower() == name_clean.lower(), ['link', 'notes']] = [link.strip(), notes.strip()]
         p_df.to_csv(path, index=False)
@@ -49,7 +48,6 @@ def load_all_data():
     all_files = glob.glob(os.path.join(path, "*.csv")) + glob.glob(os.path.join(path, "*.CSV"))
     if not all_files: 
         return None
-    
     df_list = []
     for f in all_files:
         try:
@@ -67,7 +65,6 @@ def load_all_data():
             df_list.append(temp_df)
         except Exception as e:
             st.error(f"Error reading {f}: {e}")
-
     if df_list:
         combined_df = pd.concat(df_list, ignore_index=True)
         if 'Publisher' in combined_df.columns:
@@ -100,6 +97,8 @@ def show_platform_link(seller_name, p_df):
 df = load_all_data()
 p_df = load_platforms()
 
+st.title("📝🔗 Best Rate Provider")
+
 tab1, tab2 = st.tabs(["🔍 Search Portal", "⚙️ Manage Platforms"])
 
 with tab1:
@@ -119,11 +118,9 @@ with tab1:
                 show_copy_link(match_row['link'], match_row.get('notes', ""))
         else:
             results = df[df['Publisher'] == search_query] if df is not None else pd.DataFrame()
-            
             if not results.empty:
                 base_info = results.iloc[0] 
                 st.success(f"Marketplace Results for: **{search_query}**")  
-                
                 with st.container(border=True):
                     c1, c2, c3, c4 = st.columns(4)
                     c1.metric("AS", base_info.get('AS', 'N/A'))
@@ -147,6 +144,18 @@ with tab1:
                                 p_col.metric("Price", f"${row.get('Price 1st', 'N/A')}")
                                 st.divider()
                                 show_platform_link(seller, p_df)
+                                
+                                # Restore Alternative Section
+                                st.divider()
+                                st.write("**🥈 Alternatives**")
+                                a1, a2 = st.columns(2)
+                                alt2_name = row.get('Best Seller 2nd', 'N/A')
+                                alt2_price = row.get('Price 2nd', 'N/A')
+                                alt3_name = row.get('Best Seller 3rd', 'N/A')
+                                alt3_price = row.get('Price 3rd', 'N/A')
+                                
+                                a1.info(f"**{alt2_name}**\n\nPrice: ${alt2_price}")
+                                a2.info(f"**{alt3_name}**\n\nPrice: ${alt3_price}")
                         else:
                             st.info(f"No {p_type} data found.")
             else:
@@ -155,16 +164,11 @@ with tab1:
 with tab2:
     st.header("Manage Negotiated Sites & Platforms")
     mode = st.radio("Action", ["Add New", "Edit Existing"], horizontal=True)
-    
-    existing_name = ""
-    existing_link = ""
-    existing_notes = ""
-    
+    existing_name, existing_link, existing_notes = "", "", ""
     if mode == "Edit Existing" and not p_df.empty:
         target_site = st.selectbox("Select Site to Update", p_df['platform'].tolist())
         row = p_df[p_df['platform'] == target_site].iloc[0]
-        existing_name = row['platform']
-        existing_link = row['link']
+        existing_name, existing_link = row['platform'], row['link']
         existing_notes = row['notes'] if pd.notna(row['notes']) else ""
     
     with st.form("platform_form", clear_on_submit=(mode == "Add New")):
@@ -174,18 +178,14 @@ with tab2:
             final_name = existing_name
         else:
             final_name = col_a.text_input("Platform/Domain (e.g. adsy.com)")
-            
         u_link = col_b.text_input("Direct Dashboard Link", value=existing_link)
         u_notes = st.text_area("Negotiation Notes", value=existing_notes)
-        
         submit_lbl = "Update Platform" if mode == "Edit Existing" else "Save to Database"
         save_btn = st.form_submit_button(submit_lbl)
-        
         if save_btn and final_name and u_link:
             result = save_or_update_platform(final_name, u_link, u_notes)
             st.success(f"Successfully {result} {final_name}!")
             st.rerun()
-
     st.divider()
     st.subheader("Current Database")
     st.dataframe(p_df, use_container_width=True, hide_index=True)
