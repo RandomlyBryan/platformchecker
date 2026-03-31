@@ -178,7 +178,7 @@ with tab2:
             final_name = existing_name
         else:
             final_name = col_a.text_input("Platform/Domain (e.g. adsy.com)")
-        u_link = col_b.text_input("Direct Dashboard Link", value=existing_link)
+        u_link = col_b.text_input("PitchBox Links", value=existing_link)
         u_notes = st.text_area("Negotiation Notes", value=existing_notes)
         submit_lbl = "Update Platform" if mode == "Edit Existing" else "Save to Database"
         save_btn = st.form_submit_button(submit_lbl)
