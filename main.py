@@ -34,15 +34,53 @@ def save_or_update_platform(name, link, notes):
     new_row = pd.DataFrame([[name_clean, link.strip(), notes.strip()]], columns=['platform', 'link', 'notes'])
     
     if not p_df.empty and name_clean.lower() in p_df['platform'].str.lower().values:
-        # Update existing
         p_df.loc[p_df['platform'].str.lower() == name_clean.lower(), ['link', 'notes']] = [link.strip(), notes.strip()]
         p_df.to_csv(path, index=False)
         return "updated"
     else:
-        # Add new
         updated_df = pd.concat([p_df, new_row], ignore_index=True)
         updated_df.to_csv(path, index=False)
         return "added"
+
+@st.cache_data(ttl=60)
+def load_all_data():
+    path = 'csv_data'
+    if not os.path.exists(path): 
+        os.makedirs(path)
+    all_files = glob.glob(os.path.join(path, "*.csv")) + glob.glob(os.path.join(path, "*.CSV"))
+    if not all_files: 
+        return None
+    
+    df_list = []
+    for f in all_files:
+        try:
+            temp_df = pd.read_csv(f, low_memory=False)
+            if 'Publisher' not in temp_df.columns and len(temp_df.columns) >= 30:
+                mapped_df = pd.DataFrame()
+                mapped_df['Publisher'] = temp_df.iloc[:, 0]
+                mapped_df['Price 1st'] = temp_df.iloc[:, 3]
+                mapped_df['Referral Link 1st'] = temp_df.iloc[:, 29]
+                mapped_df['Best Seller 1st'] = "MPE Premium Sheet"
+                mapped_df['Type'] = 'Guest Post' 
+                mapped_df['Rating 1st'] = 'N/A'
+                mapped_df['DR'] = temp_df.iloc[:, 1] if len(temp_df.columns) > 1 else "N/A"
+                temp_df = mapped_df
+            df_list.append(temp_df)
+        except Exception as e:
+            st.error(f"Error reading {f}: {e}")
+
+    if df_list:
+        combined_df = pd.concat(df_list, ignore_index=True)
+        if 'Publisher' in combined_df.columns:
+            combined_df['Publisher'] = combined_df['Publisher'].apply(extract_domain)
+        if 'Price 1st' in combined_df.columns:
+            combined_df['temp_price'] = pd.to_numeric(
+                combined_df['Price 1st'].astype(str).str.replace('$', '').str.replace(',', ''), 
+                errors='coerce'
+            )
+            combined_df = combined_df.sort_values(by=['Publisher', 'temp_price'], ascending=[True, True])
+        return combined_df
+    return None
 
 def show_copy_link(link, notes=None):
     if notes and str(notes).strip() and str(notes).lower() != 'nan':
@@ -60,9 +98,11 @@ def show_platform_link(seller_name, p_df):
     else:
         st.caption("No dashboard link mapped for this seller.")
 
-# --- DATA LOADING ---
-df = load_all_data() # Assuming the load_all_data function from previous steps is present
+# --- INITIALIZE ---
+df = load_all_data()
 p_df = load_platforms()
+
+st.title("📝🔗 Best Rate Provider")
 
 tab1, tab2 = st.tabs(["🔍 Search Portal", "⚙️ Manage Platforms"])
 
@@ -83,14 +123,43 @@ with tab1:
                 match_row = direct_match.iloc[0]
                 show_copy_link(match_row['link'], match_row.get('notes', ""))
         else:
-            # Standard CSV search logic follows here...
-            st.info("Searching CSV database...") 
-            # (Insert previous CSV search results logic here)
+            results = df[df['Publisher'] == search_query] if df is not None else pd.DataFrame()
+            
+            if not results.empty:
+                base_info = results.iloc[0] 
+                st.success(f"CSV Results for: **{search_query}**")  
+                
+                with st.container(border=True):
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("AS", base_info.get('AS', 'N/A'))
+                    c2.metric("DR", base_info.get('DR', 'N/A'))          
+                    traffic = base_info.get('Total Organic Traffic', 0)
+                    traffic_display = f"{int(traffic):,}" if pd.notna(traffic) and str(traffic).replace('.','').isdigit() else "N/A"
+                    c3.metric("Traffic", traffic_display)
+                    c4.metric("Top Country", str(base_info.get('Top Country', 'N/A')).upper())        
+
+                l_col, r_col = st.columns(2)
+                for col, p_type in zip([l_col, r_col], ['Guest Post', 'Link Insertion']):
+                    with col:
+                        st.header(f"{'📝' if p_type == 'Guest Post' else '🔗'} {p_type}")
+                        subset = results[results['Type'].str.contains(p_type, case=False, na=False)]
+                        if not subset.empty:
+                            row = subset.iloc[0]
+                            with st.container(border=True):
+                                seller = row.get('Best Seller 1st', 'N/A')
+                                st.subheader(f"🥇 {seller}")
+                                m1, m2 = st.columns(2)
+                                m1.metric("Best Price", f"${row.get('Price 1st', 'N/A')}")
+                                m2.metric("Rating", f"⭐ {row.get('Rating 1st', 'N/A')}")
+                                show_platform_link(seller, p_df)
+                        else:
+                            st.info(f"No {p_type} data.")
+            else:
+                st.error(f"No results found for '{search_query}'.")
 
 with tab2:
     st.header("Manage Negotiated Sites & Platforms")
     
-    # --- UPDATE/EDIT SECTION ---
     mode = st.radio("Action", ["Add New", "Edit Existing"], horizontal=True)
     
     existing_name = ""
@@ -106,11 +175,8 @@ with tab2:
     
     with st.form("platform_form", clear_on_submit=(mode == "Add New")):
         col_a, col_b = st.columns(2)
-        
-        # If editing, name is read-only to maintain database integrity
         if mode == "Edit Existing":
-            u_name = col_a.text_input("Platform/Domain", value=existing_name, disabled=True)
-            # We use the disabled value for the update logic
+            col_a.text_input("Platform/Domain", value=existing_name, disabled=True)
             final_name = existing_name
         else:
             final_name = col_a.text_input("Platform/Domain (e.g. adsy.com)")
@@ -123,10 +189,7 @@ with tab2:
         
         if save_btn and final_name and u_link:
             result = save_or_update_platform(final_name, u_link, u_notes)
-            if result == "updated":
-                st.success(f"Updated {final_name} successfully!")
-            else:
-                st.success(f"Added {final_name} to database!")
+            st.success(f"Successfully {result} {final_name}!")
             st.rerun()
 
     st.divider()
