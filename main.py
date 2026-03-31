@@ -111,7 +111,7 @@ with tab1:
         if not direct_match.empty:
             st.success(f"Direct Negotiated Match Found: **{search_query}**")
             with st.container(border=True):
-                st.subheader("🤝 Negotiated")
+                st.subheader("🤝 Succesful Negotiation")
                 show_copy_link(direct_match.iloc[0]['link'])
         else:
             # Fallback to CSV search
