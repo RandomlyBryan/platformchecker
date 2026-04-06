@@ -52,44 +52,49 @@ def load_all_data():
     df_list = []
     for f in all_files:
         try:
-            # Check the file first to see how many columns it has
-            # We read only 1 row to determine column count efficiently
+            # Determine the file type by reading just the columns first
             sample = pd.read_csv(f, nrows=1, low_memory=False)
             
-            # --- MAPPING LOGIC FOR NEW CSV (30+ Columns, Data starts row 3) ---
+            # --- MAPPING FOR YOUR NEW CSV (Based on screenshot) ---
+            # Column A (Domain) = 0
+            # Column D (Price) = 3
+            # Column AD (Pitchbox Link) = 29
             if len(sample.columns) >= 30:
-                # skiprows=2 means we start reading from Row 3
-                # header=None because Row 3 is data, and we will name columns manually
+                # We skip row 1 (the empty one) and row 2 (the headers we see in blue)
+                # This treats Row 3 as the first row of data
                 temp_df = pd.read_csv(f, skiprows=2, header=None, low_memory=False)
                 
                 mapped_df = pd.DataFrame()
-                mapped_df['Publisher'] = temp_df.iloc[:, 0].apply(extract_domain) # Col A
-                mapped_df['Price 1st'] = temp_df.iloc[:, 3]                     # Col D
-                mapped_df['Referral Link 1st'] = temp_df.iloc[:, 29]           # Col AD
+                # Clean up domain names immediately
+                mapped_df['Publisher'] = temp_df.iloc[:, 0].apply(extract_domain)
+                mapped_df['Price 1st'] = temp_df.iloc[:, 3]
+                mapped_df['Referral Link 1st'] = temp_df.iloc[:, 29]
                 mapped_df['Best Seller 1st'] = "Direct Negotiation"
-                mapped_df['Type'] = 'Guest Post' 
-                mapped_df['DR'] = temp_df.iloc[:, 1] if len(temp_df.columns) > 1 else "N/A"
+                mapped_df['Type'] = 'Guest Post'
+                # Optional: grab niche or other data if needed
+                mapped_df['DR'] = "N/A" 
                 mapped_df['is_direct_csv'] = True 
                 df_list.append(mapped_df)
             
-            # --- LOGIC FOR ORIGINAL MARKETPLACE CSVS (Headers on Row 1) ---
-            else:
+            # --- MAPPING FOR ORIGINAL MARKETPLACE CSVS ---
+            elif 'Publisher' in sample.columns:
                 temp_df = pd.read_csv(f, low_memory=False)
-                if 'Publisher' in temp_df.columns:
-                    temp_df['is_direct_csv'] = False
-                    temp_df['Publisher'] = temp_df['Publisher'].apply(extract_domain)
-                    df_list.append(temp_df)
+                temp_df['is_direct_csv'] = False
+                temp_df['Publisher'] = temp_df['Publisher'].apply(extract_domain)
+                df_list.append(temp_df)
                 
         except Exception as e:
             st.error(f"Error reading {f}: {e}")
             
     if df_list:
         combined_df = pd.concat(df_list, ignore_index=True)
+        # Standardize prices for sorting
         if 'Price 1st' in combined_df.columns:
             combined_df['temp_price'] = pd.to_numeric(
                 combined_df['Price 1st'].astype(str).str.replace('$', '').str.replace(',', ''), 
                 errors='coerce'
             )
+            # Sort: Priority to direct csv matches, then cheapest price
             combined_df = combined_df.sort_values(by=['Publisher', 'is_direct_csv', 'temp_price'], ascending=[True, False, True])
         return combined_df
     return None
@@ -97,9 +102,14 @@ def load_all_data():
 def show_copy_link(link, notes=None):
     if notes and str(notes).strip() and str(notes).lower() != 'nan':
         st.warning(f"📝 {notes}")
-    st.write("📋 **Copy Dashboard Link:**")
-    st.code(link, language=None)
-    st.link_button("🚀 Open Dashboard", link, use_container_width=True)
+    
+    # Simple check to make sure the link isn't empty or 'nan'
+    if pd.isna(link) or str(link).lower() == 'nan' or not str(link).strip():
+        st.error("No Link available for this entry.")
+    else:
+        st.write("📋 **Copy Dashboard Link:**")
+        st.code(link, language=None)
+        st.link_button("🚀 Open Dashboard", link, use_container_width=True)
 
 def show_platform_link(seller_name, p_df, csv_link=None):
     name_clean = str(seller_name).lower().strip()
@@ -109,9 +119,9 @@ def show_platform_link(seller_name, p_df, csv_link=None):
         row = match.iloc[0]
         show_copy_link(row['link'], row.get('notes', ""))
     elif csv_link and str(csv_link).startswith('http'):
-        show_copy_link(csv_link, "Link from Negotiated Database")
+        show_copy_link(csv_link, "Direct link from spreadsheet")
     else:
-        st.caption("No dashboard link mapped.")
+        st.caption("No dashboard link mapped for this seller.")
 
 df = load_all_data()
 p_df = load_platforms()
@@ -129,25 +139,30 @@ with tab1:
     if raw_input:
         search_query = extract_domain(raw_input)
         
+        # 1. Check platforms.csv (Manual overrides)
         direct_match = p_df[p_df['platform'].str.lower() == search_query]
+        
+        # 2. Check the Negotiated CSV
         csv_negotiated = pd.DataFrame()
         if df is not None:
             csv_negotiated = df[(df['Publisher'] == search_query) & (df['is_direct_csv'] == True)]
 
         if not direct_match.empty:
-            st.success(f"Direct Negotiated Match: **{search_query}**")
+            st.success(f"Direct Negotiated Match (Platform.csv): **{search_query}**")
             with st.container(border=True):
                 match_row = direct_match.iloc[0]
                 show_copy_link(match_row['link'], match_row.get('notes', ""))
         
         elif not csv_negotiated.empty:
-            st.success(f"Direct Negotiated Match (CSV): **{search_query}**")
+            st.success(f"Direct Negotiated Match (Master List): **{search_query}**")
             with st.container(border=True):
-                negotiated_row = csv_negotiated.iloc[0]
-                st.metric("Negotiated Price", f"${negotiated_row['Price 1st']}")
-                show_copy_link(negotiated_row['Referral Link 1st'], "Found in Negotiated CSV")
+                # Using the best (cheapest) direct negotiated row
+                neg_row = csv_negotiated.iloc[0]
+                st.metric("Negotiated Price", f"${neg_row['Price 1st']}")
+                show_copy_link(neg_row['Referral Link 1st'], "Source: Master Sheet")
 
         else:
+            # 3. Standard Marketplace Logic
             results = df[df['Publisher'] == search_query] if df is not None else pd.DataFrame()
             if not results.empty:
                 base_info = results.iloc[0] 
@@ -176,6 +191,7 @@ with tab1:
                                 st.divider()
                                 show_platform_link(seller, p_df, csv_link=row.get('Referral Link 1st'))
                                 
+                                # Alternatives section
                                 st.divider()
                                 st.write("**🥈 Alternatives**")
                                 a1, a2 = st.columns(2)
