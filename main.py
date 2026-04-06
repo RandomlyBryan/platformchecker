@@ -128,7 +128,7 @@ with tab1:
 
         if not csv_negotiated.empty:
             neg_row = csv_negotiated.sort_values('temp_price').iloc[0]
-            st.success(f"Direct Negotiated Match (Master List): **{search_query}**")
+            st.success(f"Negotiated: **{search_query}**")
             with st.container(border=True):
                 # FIXED: Price now correctly passed to metric
                 price_val = str(neg_row['Price 1st']).replace('$', '').replace(',', '')
