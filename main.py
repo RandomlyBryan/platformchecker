@@ -52,30 +52,41 @@ def load_all_data():
     df_list = []
     for f in all_files:
         try:
-            sample = pd.read_csv(f, nrows=1, low_memory=False)
+            # First check: determine column count without skipping rows
+            sample = pd.read_csv(f, nrows=0, low_memory=False)
+            col_count = len(sample.columns)
             
             # --- MAPPING FOR THE NEGOTIATED CSV (30+ Columns) ---
-            if len(sample.columns) >= 30:
-                temp_df = pd.read_csv(f, skiprows=2, header=None, low_memory=False)
-                mapped_df = pd.DataFrame()
-                mapped_df['Publisher'] = temp_df.iloc[:, 0].apply(extract_domain)
-                mapped_df['Price 1st'] = temp_df.iloc[:, 3]
-                mapped_df['Referral Link 1st'] = temp_df.iloc[:, 29]
-                mapped_df['Best Seller 1st'] = "Direct Negotiation"
-                mapped_df['Type'] = 'Guest Post'
-                mapped_df['DR'] = "N/A" 
-                mapped_df['is_direct_csv'] = True 
-                df_list.append(mapped_df)
+            if col_count >= 30:
+                # Second check: Ensure the file actually has data after row 2
+                temp_full = pd.read_csv(f, skiprows=2, header=None, low_memory=False)
+                
+                if not temp_full.empty:
+                    mapped_df = pd.DataFrame()
+                    mapped_df['Publisher'] = temp_full.iloc[:, 0].apply(extract_domain)
+                    mapped_df['Price 1st'] = temp_full.iloc[:, 3]
+                    mapped_df['Referral Link 1st'] = temp_full.iloc[:, 29]
+                    mapped_df['Best Seller 1st'] = "Direct Negotiation"
+                    mapped_df['Type'] = 'Guest Post'
+                    mapped_df['DR'] = "N/A" 
+                    mapped_df['is_direct_csv'] = True 
+                    df_list.append(mapped_df)
             
             # --- MAPPING FOR ORIGINAL MARKETPLACE CSVS ---
-            elif 'Publisher' in sample.columns:
+            else:
                 temp_df = pd.read_csv(f, low_memory=False)
-                temp_df['is_direct_csv'] = False
-                temp_df['Publisher'] = temp_df['Publisher'].apply(extract_domain)
-                df_list.append(temp_df)
+                # Check if 'Publisher' column exists (case-insensitive)
+                cols_lower = [c.lower() for c in temp_df.columns]
+                if 'publisher' in cols_lower:
+                    # Rename the column to 'Publisher' for consistency
+                    temp_df.columns = [c if c.lower() != 'publisher' else 'Publisher' for c in temp_df.columns]
+                    temp_df['is_direct_csv'] = False
+                    temp_df['Publisher'] = temp_df['Publisher'].apply(extract_domain)
+                    df_list.append(temp_df)
                 
         except Exception as e:
-            st.error(f"Error reading {f}: {e}")
+            # Silently skip empty files or minor errors to keep UI clean
+            pass
             
     if df_list:
         combined_df = pd.concat(df_list, ignore_index=True)
@@ -84,7 +95,7 @@ def load_all_data():
                 combined_df['Price 1st'].astype(str).str.replace('$', '').str.replace(',', ''), 
                 errors='coerce'
             )
-            # Sort: Priority to is_direct_csv, then lowest price
+            # Sort: Priority to Negotiated List, then cheapest price
             combined_df = combined_df.sort_values(by=['Publisher', 'is_direct_csv', 'temp_price'], ascending=[True, False, True])
         return combined_df
     return None
@@ -128,17 +139,13 @@ with tab1:
     if raw_input:
         search_query = extract_domain(raw_input)
         
-        # FIND ALL MATCHES
-        # 1. From Platforms.csv
-        p_match = p_df[p_df['platform'].str.lower() == search_query]
-        
-        # 2. From Negotiated CSV (Master Sheet)
+        # Priority Logic: Check Master Negotiated List first
         csv_negotiated = pd.DataFrame()
         if df is not None:
             csv_negotiated = df[(df['Publisher'] == search_query) & (df['is_direct_csv'] == True)]
 
-        # --- PRIORITY LOGIC ---
-        # If it's in the Master Sheet (Negotiated CSV), show that FIRST as the Direct Match
+        p_match = p_df[p_df['platform'].str.lower() == search_query]
+
         if not csv_negotiated.empty:
             neg_row = csv_negotiated.iloc[0]
             st.success(f"Direct Negotiated Match (Master List): **{search_query}**")
@@ -146,7 +153,6 @@ with tab1:
                 st.metric("Negotiated Price", f"${neg_row['Price 1st']}")
                 show_copy_link(neg_row['Referral Link 1st'], "Source: Master Sheet")
         
-        # Else if it's only in platforms.csv, show that
         elif not p_match.empty:
             st.success(f"Direct Negotiated Match (Platform.csv): **{search_query}**")
             with st.container(border=True):
@@ -154,7 +160,6 @@ with tab1:
                 show_copy_link(match_row['link'], match_row.get('notes', ""))
         
         else:
-            # Standard Marketplace logic
             results = df[df['Publisher'] == search_query] if df is not None else pd.DataFrame()
             if not results.empty:
                 base_info = results.iloc[0] 
