@@ -146,7 +146,7 @@ with tab1:
             st.success(f"Direct Negotiated Match (Master List): **{search_query}**")
             with st.container(border=True):
                 st.metric("Negotiated Price", f"${neg_row['Price 1st']}")
-                show_copy_link(neg_row['Referral Link 1st'], "Found in Negotiated Master CSV")
+                show_copy_link(neg_row['Referral Link 1st'], "Found In Premium Sheet")
         
         elif not p_match.empty:
             st.success(f"Direct Negotiated Match (Platform.csv): **{search_query}**")
