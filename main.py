@@ -52,41 +52,34 @@ def load_all_data():
     df_list = []
     for f in all_files:
         try:
-            # First check: determine column count without skipping rows
-            sample = pd.read_csv(f, nrows=0, low_memory=False)
-            col_count = len(sample.columns)
+            # Load the file completely to check column count properly
+            temp_raw = pd.read_csv(f, low_memory=False)
+            col_count = len(temp_raw.columns)
             
-            # --- MAPPING FOR THE NEGOTIATED CSV (30+ Columns) ---
+            # --- CASE 1: Your Negotiated Master List (30+ Columns, Data at Row 3) ---
             if col_count >= 30:
-                # Second check: Ensure the file actually has data after row 2
-                temp_full = pd.read_csv(f, skiprows=2, header=None, low_memory=False)
-                
-                if not temp_full.empty:
+                # Reload skipping the first two rows (junk and headers)
+                temp_df = pd.read_csv(f, skiprows=2, header=None, low_memory=False)
+                if not temp_df.empty:
                     mapped_df = pd.DataFrame()
-                    mapped_df['Publisher'] = temp_full.iloc[:, 0].apply(extract_domain)
-                    mapped_df['Price 1st'] = temp_full.iloc[:, 3]
-                    mapped_df['Referral Link 1st'] = temp_full.iloc[:, 29]
+                    # Column A=0 (Domain), D=3 (Price), AD=29 (Pitchbox)
+                    mapped_df['Publisher'] = temp_df.iloc[:, 0].apply(extract_domain)
+                    mapped_df['Price 1st'] = temp_df.iloc[:, 3]
+                    mapped_df['Referral Link 1st'] = temp_df.iloc[:, 29]
                     mapped_df['Best Seller 1st'] = "Direct Negotiation"
                     mapped_df['Type'] = 'Guest Post'
-                    mapped_df['DR'] = "N/A" 
                     mapped_df['is_direct_csv'] = True 
                     df_list.append(mapped_df)
             
-            # --- MAPPING FOR ORIGINAL MARKETPLACE CSVS ---
-            else:
-                temp_df = pd.read_csv(f, low_memory=False)
-                # Check if 'Publisher' column exists (case-insensitive)
-                cols_lower = [c.lower() for c in temp_df.columns]
-                if 'publisher' in cols_lower:
-                    # Rename the column to 'Publisher' for consistency
-                    temp_df.columns = [c if c.lower() != 'publisher' else 'Publisher' for c in temp_df.columns]
-                    temp_df['is_direct_csv'] = False
-                    temp_df['Publisher'] = temp_df['Publisher'].apply(extract_domain)
-                    df_list.append(temp_df)
+            # --- CASE 2: Standard Marketplace CSVs ---
+            elif 'Publisher' in temp_raw.columns or 'publisher' in [c.lower() for c in temp_raw.columns]:
+                temp_raw.columns = [c.title() if c.lower() == 'publisher' else c for c in temp_raw.columns]
+                temp_raw['is_direct_csv'] = False
+                temp_raw['Publisher'] = temp_raw['Publisher'].apply(extract_domain)
+                df_list.append(temp_raw)
                 
-        except Exception as e:
-            # Silently skip empty files or minor errors to keep UI clean
-            pass
+        except Exception:
+            continue
             
     if df_list:
         combined_df = pd.concat(df_list, ignore_index=True)
@@ -95,7 +88,7 @@ def load_all_data():
                 combined_df['Price 1st'].astype(str).str.replace('$', '').str.replace(',', ''), 
                 errors='coerce'
             )
-            # Sort: Priority to Negotiated List, then cheapest price
+            # Ensure sorting puts Direct at the top and lowest price first
             combined_df = combined_df.sort_values(by=['Publisher', 'is_direct_csv', 'temp_price'], ascending=[True, False, True])
         return combined_df
     return None
@@ -119,9 +112,9 @@ def show_platform_link(seller_name, p_df, csv_link=None):
         row = match.iloc[0]
         show_copy_link(row['link'], row.get('notes', ""))
     elif csv_link and str(csv_link).startswith('http'):
-        show_copy_link(csv_link, "Direct link from spreadsheet")
+        show_copy_link(csv_link, "Link from Master Sheet")
     else:
-        st.caption("No dashboard link mapped.")
+        st.caption("No link mapped.")
 
 df = load_all_data()
 p_df = load_platforms()
@@ -139,19 +132,21 @@ with tab1:
     if raw_input:
         search_query = extract_domain(raw_input)
         
-        # Priority Logic: Check Master Negotiated List first
+        # Priority 1: Check Negotiated Master CSV
         csv_negotiated = pd.DataFrame()
         if df is not None:
             csv_negotiated = df[(df['Publisher'] == search_query) & (df['is_direct_csv'] == True)]
 
+        # Priority 2: Check manual platforms.csv
         p_match = p_df[p_df['platform'].str.lower() == search_query]
 
         if not csv_negotiated.empty:
-            neg_row = csv_negotiated.iloc[0]
+            # Pick the cheapest negotiated entry
+            neg_row = csv_negotiated.sort_values('temp_price').iloc[0]
             st.success(f"Direct Negotiated Match (Master List): **{search_query}**")
             with st.container(border=True):
                 st.metric("Negotiated Price", f"${neg_row['Price 1st']}")
-                show_copy_link(neg_row['Referral Link 1st'], "Source: Master Sheet")
+                show_copy_link(neg_row['Referral Link 1st'], "Found in Negotiated Master CSV")
         
         elif not p_match.empty:
             st.success(f"Direct Negotiated Match (Platform.csv): **{search_query}**")
@@ -160,6 +155,7 @@ with tab1:
                 show_copy_link(match_row['link'], match_row.get('notes', ""))
         
         else:
+            # Default Marketplace Logic
             results = df[df['Publisher'] == search_query] if df is not None else pd.DataFrame()
             if not results.empty:
                 base_info = results.iloc[0] 
@@ -179,7 +175,7 @@ with tab1:
                         st.subheader(f"{'📝' if p_type == 'Guest Post' else '🔗'} {p_type}")
                         subset = results[results['Type'].str.contains(p_type, case=False, na=False)]
                         if not subset.empty:
-                            row = subset.iloc[0]
+                            row = subset.sort_values('temp_price').iloc[0]
                             with st.container(border=True):
                                 seller = row.get('Best Seller 1st', 'N/A')
                                 t_col, p_col = st.columns([2, 1])
@@ -187,14 +183,8 @@ with tab1:
                                 p_col.metric("Price", f"${row.get('Price 1st', 'N/A')}")
                                 st.divider()
                                 show_platform_link(seller, p_df, csv_link=row.get('Referral Link 1st'))
-                                
-                                st.divider()
-                                st.write("**🥈 Alternatives**")
-                                a1, a2 = st.columns(2)
-                                a1.info(f"**{row.get('Best Seller 2nd', 'N/A')}**\n\nPrice: ${row.get('Price 2nd', 'N/A')}")
-                                a2.info(f"**{row.get('Best Seller 3rd', 'N/A')}**\n\nPrice: ${row.get('Price 3rd', 'N/A')}")
                         else:
-                            st.info(f"No {p_type} data found.")
+                            st.info(f"No {p_type} found.")
             else:
                 st.error(f"No results found for '{search_query}'.")
 
@@ -214,15 +204,12 @@ with tab2:
             col_a.text_input("Platform/Domain", value=existing_name, disabled=True)
             final_name = existing_name
         else:
-            final_name = col_a.text_input("Platform/Domain (e.g. adsy.com)")
-        u_link = col_b.text_input("PitchBox Links", value=existing_link)
+            final_name = col_a.text_input("Platform/Domain")
+        u_link = col_b.text_input("PitchBox Link", value=existing_link)
         u_notes = st.text_area("Negotiation Notes", value=existing_notes)
-        submit_lbl = "Update Platform" if mode == "Edit Existing" else "Save to Database"
-        save_btn = st.form_submit_button(submit_lbl)
+        save_btn = st.form_submit_button("Save to Database")
         if save_btn and final_name and u_link:
             result = save_or_update_platform(final_name, u_link, u_notes)
             st.success(f"Successfully {result} {final_name}!")
             st.rerun()
-    st.divider()
-    st.subheader("Current Database")
     st.dataframe(p_df, use_container_width=True, hide_index=True)
