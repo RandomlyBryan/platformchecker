@@ -4,7 +4,7 @@ import glob
 import os
 import re
 
-st.set_page_config(page_title="Best Rate Portal", layout="wide")
+st.set_page_config(page_title="Best Rate Portal", page_icon="💲", layout="wide")
 
 def extract_domain(url):
     url = str(url)
