@@ -72,7 +72,6 @@ def load_all_data():
                 temp_raw['is_direct_csv'] = False
                 temp_raw['Publisher'] = temp_raw['Publisher'].apply(extract_domain)
                 df_list.append(temp_raw)
-                
         except Exception:
             continue
             
@@ -87,6 +86,12 @@ def load_all_data():
         return combined_df
     return None
 
+def get_managed_info(domain, p_df):
+    match = p_df[p_df['platform'].str.lower() == str(domain).lower()]
+    if not match.empty:
+        return match.iloc[0].to_dict()
+    return None
+
 def show_copy_link(link, notes=None):
     if notes and str(notes).strip() and str(notes).lower() != 'nan':
         st.warning(f"📝 **Negotiation Notes:** {notes}")
@@ -97,13 +102,6 @@ def show_copy_link(link, notes=None):
         st.write("📋 **Copy Dashboard Link:**")
         st.code(link, language=None)
         st.link_button("🚀 Open Dashboard", link, use_container_width=True)
-
-# Function to get notes for a domain if it exists in platforms.csv
-def get_managed_notes(domain, p_df):
-    match = p_df[p_df['platform'].str.lower() == str(domain).lower()]
-    if not match.empty:
-        return match.iloc[0].get('notes', "")
-    return ""
 
 df = load_all_data()
 p_df = load_platforms()
@@ -120,35 +118,32 @@ with tab1:
 
     if raw_input:
         search_query = extract_domain(raw_input)
+        managed_data = get_managed_info(search_query, p_df)
+        managed_notes = managed_data['notes'] if managed_data else ""
         
-        # Check if this site is in Manage Platforms to get notes
-        managed_notes = get_managed_notes(search_query, p_df)
-        
-        # 1. Check Negotiated Master CSV
+        # 1. Master Negotiated List check
         csv_negotiated = pd.DataFrame()
         if df is not None:
             csv_negotiated = df[(df['Publisher'] == search_query) & (df['is_direct_csv'] == True)]
-
-        # 2. Check platforms.csv (manual list)
-        p_match = p_df[p_df['platform'].str.lower() == search_query]
 
         if not csv_negotiated.empty:
             neg_row = csv_negotiated.sort_values('temp_price').iloc[0]
             st.success(f"Direct Negotiated Match (Master List): **{search_query}**")
             with st.container(border=True):
-                st.metric("Negotiated Price", f"${neg_row['Price 1st']}")
-                # Prioritize link from Platforms.csv if it exists, otherwise use Master List link
-                final_link = p_match.iloc[0]['link'] if not p_match.empty else neg_row['Referral Link 1st']
+                # FIXED: Price now correctly passed to metric
+                price_val = str(neg_row['Price 1st']).replace('$', '').replace(',', '')
+                st.metric("Negotiated Price", f"${price_val}")
+                
+                # Use Link from Platform List if exists, else Spreadsheet
+                final_link = managed_data['link'] if managed_data else neg_row['Referral Link 1st']
                 show_copy_link(final_link, managed_notes)
         
-        elif not p_match.empty:
+        elif managed_data:
             st.success(f"Direct Negotiated Match (Platform.csv): **{search_query}**")
             with st.container(border=True):
-                match_row = p_match.iloc[0]
-                show_copy_link(match_row['link'], managed_notes)
+                show_copy_link(managed_data['link'], managed_notes)
         
         else:
-            # Marketplace Logic
             results = df[df['Publisher'] == search_query] if df is not None else pd.DataFrame()
             if not results.empty:
                 base_info = results.iloc[0] 
@@ -157,8 +152,8 @@ with tab1:
                     c1, c2, c3, c4 = st.columns(4)
                     c1.metric("AS", base_info.get('AS', 'N/A'))
                     c2.metric("DR", base_info.get('DR', 'N/A'))          
-                    traffic_display = f"{int(base_info.get('Total Organic Traffic', 0)):,}" if pd.notna(base_info.get('Total Organic Traffic')) else "N/A"
-                    c3.metric("Traffic", traffic_display)
+                    traffic = f"{int(base_info.get('Total Organic Traffic', 0)):,}" if pd.notna(base_info.get('Total Organic Traffic')) else "0"
+                    c3.metric("Traffic", traffic)
                     c4.metric("Top Country", str(base_info.get('Top Country', 'N/A')).upper())        
 
                 l_col, r_col = st.columns(2)
@@ -174,10 +169,7 @@ with tab1:
                                 t_col.markdown(f"### 🥇 {seller}")
                                 p_col.metric("Price", f"${row.get('Price 1st', 'N/A')}")
                                 st.divider()
-                                # Even in marketplace view, show managed notes if they exist for the publisher
-                                seller_domain = extract_domain(seller) if "." in str(seller) else ""
-                                current_notes = managed_notes if not managed_notes else get_managed_notes(seller_domain, p_df)
-                                show_copy_link(row.get('Referral Link 1st'), current_notes)
+                                show_copy_link(row.get('Referral Link 1st'), managed_notes)
                         else:
                             st.info(f"No {p_type} found.")
             else:
@@ -202,9 +194,9 @@ with tab2:
             final_name = col_a.text_input("Platform/Domain")
         u_link = col_b.text_input("PitchBox Link", value=existing_link)
         u_notes = st.text_area("Negotiation Notes", value=existing_notes)
-        save_btn = st.form_submit_button("Save to Database")
-        if save_btn and final_name and u_link:
-            result = save_or_update_platform(final_name, u_link, u_notes)
-            st.success(f"Successfully {result} {final_name}!")
-            st.rerun()
+        if st.form_submit_button("Save to Database"):
+            if final_name and u_link:
+                result = save_or_update_platform(final_name, u_link, u_notes)
+                st.success(f"Successfully {result} {final_name}!")
+                st.rerun()
     st.dataframe(p_df, use_container_width=True, hide_index=True)
